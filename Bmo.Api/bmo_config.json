@@ -1,6 +1,12 @@
 {
   "version": "0.1",
+  "onboard_done": false,
   "workspace_path": "../workspace",
+  "services": {
+    "ai_brain": { "port": 8000 },
+    "bmo_api":  { "port": 5271 },
+    "dashboard": { "port": 3000 }
+  },
   "agent": {
     "name": "B.M.O.",
     "model": "google/gemini-2.0-flash-001",

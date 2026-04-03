@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const API_URL = "http://localhost:5271";
+const API_URL = process.env.NEXT_PUBLIC_BMO_API_URL ?? "http://localhost:5271";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

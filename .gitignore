@@ -29,6 +29,10 @@ workspace/bmo_agent.db
 # I file creati dall'agente non vanno in repo (opzionale: rimuovi se vuoi tracciarli)
 workspace/files/
 
+# ── Launcher ─────────────────────────────────────────────────────────────────
+# Log file di fallback creati da start.py su Linux senza terminale GUI
+*.log
+
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 *.iml
