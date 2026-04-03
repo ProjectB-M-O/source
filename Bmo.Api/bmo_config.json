@@ -1,0 +1,19 @@
+{
+  "version": "0.1",
+  "workspace_path": "../workspace",
+  "agent": {
+    "name": "B.M.O.",
+    "model": "google/gemini-2.0-flash-001",
+    "max_tool_iterations": 5
+  },
+  "tools": {
+    "enabled": true,
+    "log_all": true,
+    "show_in_chat": true
+  },
+  "context": {
+    "max_tokens": 8000,
+    "pruning_threshold": 0.8,
+    "compaction_enabled": true
+  }
+}

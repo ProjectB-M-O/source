@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+:root {
+  /* Structure */
+  --sidebar-bg:    #0d1117;
+  --chat-bg:       #090d13;
+  --surface:       #131920;
+  --surface-hover: #192030;
+
+  /* Bubbles */
+  --bubble-user:   #0f2847;
+  --bubble-ai:     #0d1117;
+
+  /* Accent */
+  --accent:        #3b8eea;
+  --accent-dim:    rgba(59, 142, 234, 0.15);
+
+  /* Borders */
+  --border:        #1a2233;
+  --border-subtle: #141c28;
+
+  /* Text */
+  --text:               #dde4ed;
+  --text-muted:         #4a5568;
+  --text-bubble-user:   #bdd8ff;
+  --text-bubble-ai:     #8897a8;
+  --text-time-user:     #5b8fc4;
+  --text-time-ai:       #3a4a5a;
+
+  /* Status */
+  --online:  #3fb950;
+  --offline: #f87171;
+
+  /* Tool bubble */
+  --bubble-tool:      rgba(88, 28, 135, 0.18);
+  --border-tool:      rgba(139, 92, 246, 0.3);
+  --accent-tool:      #a78bfa;
+  --text-bubble-tool: #c4b5fd;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--chat-bg);
+  color: var(--text);
+  font-family: "Outfit", system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+textarea::placeholder {
+  color: var(--text-muted);
+  font-family: "Outfit", system-ui, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+
+/* Sidebar nav item hover */
+.nav-item {
+  transition: background 0.18s ease;
+}
+.nav-item:hover {
+  background: var(--surface-hover) !important;
+}
+
+/* Loading pulse */
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50%       { opacity: 1;   transform: scale(1); }
+}
+
+/* Message fade-in */
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.msg-bubble {
+  animation: msgIn 0.18s ease forwards;
+}
+
+/* Send button glow on hover */
+.send-btn:hover:not(:disabled) {
+  box-shadow: 0 0 16px rgba(59, 142, 234, 0.45);
+  transform: scale(1.05);
+}
+.send-btn {
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+/* Input wrapper focus ring */
+.input-wrapper:focus-within {
+  border-color: rgba(59, 142, 234, 0.4) !important;
+  box-shadow: 0 0 0 3px rgba(59, 142, 234, 0.08);
+}
+.input-wrapper {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}

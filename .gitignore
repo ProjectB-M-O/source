@@ -1,0 +1,36 @@
+# ── .NET ─────────────────────────────────────────────────────────────────────
+bin/
+obj/
+/packages/
+/_ReSharper.Caches/
+riderModule.iml
+*.user
+.vs/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+AI.Brain/.venv/
+AI.Brain/__pycache__/
+AI.Brain/**/__pycache__/
+AI.Brain/**/*.pyc
+AI.Brain/**/*.pyo
+
+# Secrets — NON caricare mai
+AI.Brain/.env
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
+dashboard-bmo/node_modules/
+dashboard-bmo/.next/
+dashboard-bmo/.env*.local
+
+# ── Workspace runtime ─────────────────────────────────────────────────────────
+# Il DB SQLite è generato a runtime, non va in repo
+workspace/bmo_agent.db
+
+# I file creati dall'agente non vanno in repo (opzionale: rimuovi se vuoi tracciarli)
+workspace/files/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
