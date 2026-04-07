@@ -18,9 +18,12 @@ Bmo.Api             → .NET API gateway (port 5271)
 AI.Brain            → Python FastAPI agent engine (port 8000)
     ↓ API
 OpenRouter          → LLM provider (Gemini 2.0 / 2.5 or any model)
+
+AI.Voice (opt.)     → Flask TTS server (port 5050)
+    Piper TTS → RVC (BMO voice model) → WAV audio
 ```
 
-All three services run in separate terminals, launched automatically by `start.py`.
+All services run in separate terminals, launched automatically by `start.py`. AI.Voice is optional and must be enabled during first-run setup.
 
 ---
 
@@ -33,6 +36,7 @@ All three services run in separate terminals, launched automatically by `start.p
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
 | Database | SQLite (memory + tool audit log) |
 | LLM Provider | OpenRouter (default: `google/gemini-2.0-flash-001`) |
+| TTS (optional) | Python 3, Flask, Piper TTS, RVC (custom BMO voice model) |
 
 ---
 
@@ -60,6 +64,20 @@ B.M.O.Project/
 │   │   └── layout.tsx
 │   └── package.json
 │
+├── AI.Voice/                   # Python TTS server (optional)
+│   ├── server.py               # Flask entry point — POST /speak → WAV
+│   ├── pipeline.py             # Piper TTS → RVC pipeline
+│   ├── config.py               # Paths, ports, model settings
+│   ├── download_models.py      # Downloads Piper TTS model (~61MB)
+│   ├── patch_fairseq.py        # Applies Python 3.11 compat patches to fairseq
+│   ├── convert_model.py        # Converts RVC training checkpoint → inference format
+│   └── requirements.txt
+│
+├── export/                     # External model files (NOT in git — see below)
+│   └── bmo_rvc_model/
+│       ├── bmo_infer.pth       # RVC inference model ← must be copied manually
+│       └── bmo.index           # FAISS index        ← must be copied manually
+│
 ├── workspace/                  # Runtime data (auto-created on first run)
 │   ├── files/                  # Agent file sandbox
 │   ├── identity.json           # Agent name and persona
@@ -79,8 +97,8 @@ B.M.O.Project/
 ### Prerequisites
 
 - Python 3.10+
-- .NET 10 SDK
-- Node.js 18+
+- .NET 10 SDK *(auto-installed by start.py if missing)*
+- Node.js 18+ *(auto-installed by start.py if missing)*
 - An [OpenRouter](https://openrouter.ai) API key
 
 ### First Run
@@ -93,8 +111,35 @@ On the first run, an onboarding wizard will ask for:
 - Your OpenRouter API key
 - The AI model to use (default: `google/gemini-2.0-flash-001`)
 - Service ports (default: 8000, 5271, 3000)
+- Whether to install the **AI.Voice TTS server** (optional — requires ~700MB PyTorch download and the BMO RVC model files)
 
-The launcher then starts all three services in separate terminal windows.
+The launcher then installs all dependencies and starts all services in separate terminal windows.
+
+### AI.Voice — BMO Voice (optional)
+
+The TTS server synthesizes speech using [Piper TTS](https://github.com/rhasspy/piper) and converts it to BMO's voice with a custom [RVC](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) model.
+
+**Endpoint:** `POST http://localhost:5050/speak`
+```json
+{ "text": "Hello! I am BMO!" }
+```
+Returns raw WAV audio bytes.
+
+**Model files (not in git — store externally):**
+
+The RVC model is too large for git. After cloning the repo, copy these files manually:
+```
+export/bmo_rvc_model/bmo_infer.pth   ← RVC inference model
+export/bmo_rvc_model/bmo.index       ← FAISS retrieval index
+```
+
+The Piper TTS model (~61MB) is downloaded automatically by `start.py`.
+
+If you have the original training checkpoint (`bmo.pth`), you can convert it:
+```bash
+cd AI.Voice
+python convert_model.py
+```
 
 ### Manual Start (development)
 
@@ -120,6 +165,7 @@ npm run dev
 | Dashboard | http://localhost:3000 |
 | Swagger UI | http://localhost:5271/swagger |
 | AI Brain docs | http://localhost:8000/docs |
+| AI.Voice health | http://localhost:5050/health *(if enabled)* |
 
 ---
 
@@ -138,7 +184,8 @@ All runtime settings live in `Bmo.Api/bmo_config.json`:
   "services": {
     "ai_brain":  { "port": 8000 },
     "bmo_api":   { "port": 5271 },
-    "dashboard": { "port": 3000 }
+    "dashboard": { "port": 3000 },
+    "ai_voice":  { "enabled": false, "port": 5050 }
   },
   "context": {
     "max_tokens": 8000,
@@ -193,5 +240,7 @@ Context is managed automatically: conversation history is pruned when it approac
 ---
 
 ## Version
+
+**v0.2** — Added optional AI.Voice TTS server (Piper + RVC BMO voice model).
 
 **v0.1** — Initial release with onboarding, streaming chat, tool execution, and persistent workspace.

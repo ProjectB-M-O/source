@@ -26,6 +26,7 @@ ENV_PATH    = ROOT / "AI.Brain" / ".env"
 DASH_ENV    = ROOT / "dashboard-bmo" / ".env.local"
 DOTNET_DIR  = ROOT / ".dotnet"   # installazione .NET SDK locale
 NODE_DIR    = ROOT / ".node"     # installazione Node.js locale
+VOICE_DIR   = ROOT / "AI.Voice"  # server TTS (Flask + Piper + RVC)
 
 SYSTEM = platform.system()  # "Windows" | "Linux" | "Darwin"
 
@@ -152,6 +153,98 @@ def setup_python_venv():
         _ok("Dipendenze Python installate")
     else:
         _ok("Dipendenze Python già installate")
+
+
+# ─── 3. AI.Voice venv (opzionale) ────────────────────────────────────────────
+def _voice_py_exe() -> Path:
+    venv = VOICE_DIR / "venv"
+    return venv / ("Scripts/python.exe" if SYSTEM == "Windows" else "bin/python")
+
+
+def setup_voice_venv():
+    """Crea il venv per AI.Voice e installa tutte le dipendenze nella sequenza corretta."""
+    venv_dir = VOICE_DIR / "venv"
+    req_file = VOICE_DIR / "requirements.txt"
+    py_exe   = _voice_py_exe()
+
+    if SYSTEM == "Windows":
+        pip_exe = venv_dir / "Scripts" / "pip.exe"
+    else:
+        pip_exe = venv_dir / "bin" / "pip"
+
+    # Crea il venv se non esiste
+    if not venv_dir.exists():
+        _step("Creazione virtual environment AI.Voice...")
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        _ok("Virtual environment AI.Voice creato")
+
+    # Controlla se Flask è già installato (marker rapido per "setup già fatto")
+    probe = subprocess.run([str(py_exe), "-c", "import flask, piper, rvc_python"],
+                           capture_output=True)
+    if probe.returncode == 0:
+        _ok("Dipendenze AI.Voice già installate")
+    else:
+        _require_internet()
+
+        _step("Installazione PyTorch (CPU build) per AI.Voice...")
+        subprocess.run([
+            str(pip_exe), "install", "torch", "torchaudio",
+            "--index-url", "https://download.pytorch.org/whl/cpu",
+        ], check=True)
+
+        _step("Installazione dipendenze AI.Voice (requirements.txt)...")
+        subprocess.run([str(pip_exe), "install", "-r", str(req_file)], check=True)
+
+        _step("Installazione faiss-cpu ≥ 1.8.0 (compatibilità numpy 2.x)...")
+        subprocess.run([str(pip_exe), "install", "faiss-cpu>=1.8.0"], check=True)
+
+        _step("Reinstallazione onnxruntime (evita onnxruntime-dml)...")
+        subprocess.run([str(pip_exe), "install", "--force-reinstall", "onnxruntime"],
+                       check=True)
+
+        _step("Applicazione patch fairseq (Python 3.11+ compat)...")
+        result = subprocess.run([str(py_exe), str(VOICE_DIR / "patch_fairseq.py")])
+        if result.returncode == 0:
+            _ok("Patch fairseq applicata")
+        else:
+            _warn("Patch fairseq parzialmente fallita — potrebbe causare problemi")
+
+        _ok("Dipendenze AI.Voice installate")
+
+    # Download modelli Piper TTS se non presenti
+    piper_model = VOICE_DIR / "models" / "piper" / "en_US-lessac-medium.onnx"
+    if not piper_model.exists():
+        _require_internet()
+        _step("Download modello Piper TTS (~61MB)...")
+        result = subprocess.run([str(py_exe), str(VOICE_DIR / "download_models.py")])
+        if result.returncode == 0:
+            _ok("Modello Piper TTS scaricato")
+        else:
+            _warn("Download modello Piper TTS fallito — scaricalo manualmente con:")
+            print(f"  {CYL}  cd AI.Voice && python download_models.py{CR}")
+    else:
+        _ok("Modello Piper TTS già presente")
+
+    # Verifica modello RVC BMO
+    rvc_model = ROOT / "export" / "bmo_rvc_model" / "bmo_infer.pth"
+    rvc_index = ROOT / "export" / "bmo_rvc_model" / "bmo.index"
+    if rvc_model.exists() and rvc_index.exists():
+        _ok("Modello RVC BMO trovato")
+    else:
+        _warn("Modello RVC BMO non trovato!")
+        print(f"  {CR2}Copia manualmente i file nella cartella export/bmo_rvc_model/:{CR}")
+        if not rvc_model.exists():
+            print(f"    {CR2}✗ bmo_infer.pth  (modello inferenza){CR}")
+        if not rvc_index.exists():
+            print(f"    {CR2}✗ bmo.index      (indice FAISS){CR}")
+        print(f"  Il server AI.Voice partirà ma fallirà senza questi file.")
+
+
+def setup_voice_venv_if_enabled(config: dict):
+    if config.get("services", {}).get("ai_voice", {}).get("enabled", False):
+        print(f"\n{CB}── AI.Voice (TTS) ───────────────────────────────────────{CR}\n")
+        setup_voice_venv()
+        print()
 
 
 # ─── 3. .NET SDK 10 ──────────────────────────────────────────────────────────
@@ -408,6 +501,7 @@ _DEFAULT_SERVICES = {
     "ai_brain":  {"port": 8000},
     "bmo_api":   {"port": 5271},
     "dashboard": {"port": 3000},
+    "ai_voice":  {"enabled": False, "port": 5050},
 }
 
 
@@ -462,6 +556,18 @@ def onboard(config: dict, env: dict) -> tuple[dict, dict]:
         val = ask(f"Porta {label}", default=cur)
         svc[key] = {"port": int(val)}
 
+    # AI.Voice — server TTS opzionale
+    print(f"\n  {CY}AI.Voice — Server TTS (Piper + RVC voce BMO):{CR}")
+    print( "  Richiede PyTorch (~700MB download) e ~2GB RAM durante l'uso.")
+    print( "  Necessario solo se vuoi che BMO parli con la voce addestrata.")
+    voice_yn = input(f"  {CYL}Installare il server TTS? [s/N]:{CR} ").strip().lower()
+    voice_enabled = voice_yn in ("s", "si", "y", "yes")
+    if voice_enabled:
+        voice_port_str = ask("Porta AI.Voice (TTS)", default="5050")
+        svc["ai_voice"] = {"enabled": True, "port": int(voice_port_str)}
+    else:
+        svc.setdefault("ai_voice", {"enabled": False, "port": 5050})
+
     config["onboard_done"] = True
     return config, env
 
@@ -497,6 +603,21 @@ def modify_settings(config: dict, env: dict) -> tuple[dict, dict]:
         val = ask(f"Porta {label}", default=cur)
         if val:
             svc.setdefault(key, {})["port"] = int(val)
+
+    # AI.Voice toggle
+    voice_cfg     = svc.get("ai_voice", {})
+    voice_enabled = voice_cfg.get("enabled", False)
+    stato         = f"{CG}attivo{CR}" if voice_enabled else f"{CYL}disattivato{CR}"
+    print(f"\n  AI.Voice (TTS): {stato}")
+    toggle = input(
+        f"  {CYL}{'Disattivare' if voice_enabled else 'Attivare'} AI.Voice?{CR} [s/N]: "
+    ).strip().lower()
+    if toggle in ("s", "si", "y", "yes"):
+        voice_enabled = not voice_enabled
+        svc.setdefault("ai_voice", {})["enabled"] = voice_enabled
+        if voice_enabled:
+            val = ask("Porta AI.Voice", default=str(voice_cfg.get("port", 5050)))
+            svc["ai_voice"]["port"] = int(val)
 
     return config, env
 
@@ -623,7 +744,20 @@ def start_services(config: dict):
     launch_terminal("B.M.O. | API Gateway", api_cmd, ROOT / "Bmo.Api")
     time.sleep(0.4)
 
-    # 3 — Dashboard  (Next.js) — usa npm locale se installato
+    # 3 — AI.Voice (Flask TTS) — opzionale
+    voice_cfg = svc.get("ai_voice", {})
+    if voice_cfg.get("enabled", False):
+        voice_port = voice_cfg.get("port", 5050)
+        voice_py   = _voice_py_exe()
+        if voice_py.exists():
+            voice_cmd = f'"{voice_py}" server.py'
+            print(f"  {CG}▶{CR} AI.Voice (TTS) → http://localhost:{voice_port}")
+            launch_terminal("B.M.O. | AI.Voice", voice_cmd, VOICE_DIR)
+            time.sleep(0.4)
+        else:
+            _warn("AI.Voice venv non trovato — esegui start.py per installarlo")
+
+    # 4 — Dashboard  (Next.js) — usa npm locale se installato
     #     Se node è locale, prefissa il PATH nel comando del terminale
     #     così npm può trovare node durante l'esecuzione di next dev
     if _npm_local_cmd().exists():
@@ -671,6 +805,7 @@ def main():
         save_config(config)
         save_env(ENV_PATH, env)
         print(f"\n  {CG}Configurazione salvata con successo.{CR}")
+        setup_voice_venv_if_enabled(config)
 
     else:
         model = config.get("agent", {}).get("model", "?")
@@ -683,9 +818,12 @@ def main():
             save_config(config)
             save_env(ENV_PATH, env)
             print(f"\n  {CG}Impostazioni aggiornate.{CR}")
+            setup_voice_venv_if_enabled(config)
         else:
             # Sincronizza comunque .env.local (in caso di config già corretta)
             sync_dashboard_env(config)
+            # Installa AI.Voice se abilitato e venv mancante
+            setup_voice_venv_if_enabled(config)
 
     start_services(config)
 
