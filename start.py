@@ -225,9 +225,13 @@ def setup_voice_venv():
     else:
         _ok("Modello Piper TTS già presente")
 
+    # Crea la cartella export/bmo_rvc_model se non esiste
+    rvc_dir = ROOT / "export" / "bmo_rvc_model"
+    rvc_dir.mkdir(parents=True, exist_ok=True)
+
     # Verifica modello RVC BMO
-    rvc_model = ROOT / "export" / "bmo_rvc_model" / "bmo_infer.pth"
-    rvc_index = ROOT / "export" / "bmo_rvc_model" / "bmo.index"
+    rvc_model = rvc_dir / "bmo_infer.pth"
+    rvc_index = rvc_dir / "bmo.index"
     if rvc_model.exists() and rvc_index.exists():
         _ok("Modello RVC BMO trovato")
     else:
