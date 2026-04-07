@@ -1,11 +1,17 @@
 {
   "version": "0.1",
-  "onboard_done": false,
+  "onboard_done": true,
   "workspace_path": "../workspace",
   "services": {
-    "ai_brain": { "port": 8000 },
-    "bmo_api":  { "port": 5271 },
-    "dashboard": { "port": 3000 }
+    "ai_brain": {
+      "port": 8000
+    },
+    "bmo_api": {
+      "port": 5271
+    },
+    "dashboard": {
+      "port": 3000
+    }
   },
   "agent": {
     "name": "B.M.O.",

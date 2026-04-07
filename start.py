@@ -13,6 +13,10 @@ import subprocess
 import time
 import webbrowser
 import shutil
+import socket
+import urllib.request
+import zipfile
+import tarfile
 from pathlib import Path
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
@@ -20,6 +24,8 @@ ROOT        = Path(__file__).parent.absolute()
 CONFIG_PATH = ROOT / "Bmo.Api" / "bmo_config.json"
 ENV_PATH    = ROOT / "AI.Brain" / ".env"
 DASH_ENV    = ROOT / "dashboard-bmo" / ".env.local"
+DOTNET_DIR  = ROOT / ".dotnet"   # installazione .NET SDK locale
+NODE_DIR    = ROOT / ".node"     # installazione Node.js locale
 
 SYSTEM = platform.system()  # "Windows" | "Linux" | "Darwin"
 
@@ -50,6 +56,318 @@ def print_header():
   ╚═════╝ ╚═╝ ╚═╝     ╚═╝╚═╝ ╚═════╝
 {CR}  {CB}Project Launcher{CR}  |  {SYSTEM}
 """)
+
+
+# ─── Dependency helpers ───────────────────────────────────────────────────────
+def _step(msg: str): print(f"  {CY}»{CR} {msg}")
+def _ok(msg: str):   print(f"  {CG}✓{CR} {msg}")
+def _warn(msg: str): print(f"  {CYL}⚠{CR} {msg}")
+def _err(msg: str):  print(f"  {CR2}✗{CR} {msg}")
+
+
+# ─── Internet check ──────────────────────────────────────────────────────────
+def _has_internet() -> bool:
+    """Prova una connessione TCP a Google DNS (8.8.8.8:53) — rapido e affidabile."""
+    try:
+        socket.setdefaulttimeout(5)
+        with socket.create_connection(("8.8.8.8", 53)):
+            return True
+    except OSError:
+        return False
+
+
+def _require_internet():
+    """
+    Controlla la connessione Internet.
+    Se assente, stampa il messaggio di errore ed esce.
+    Chiamata solo quando un download è effettivamente necessario.
+    """
+    _step("Verifica connessione Internet...")
+    if _has_internet():
+        _ok("Connessione Internet attiva")
+    else:
+        _err("Nessuna connessione Internet rilevata.")
+        print(f"\n  {CR2}Alcune dipendenze mancano e devono essere scaricate.")
+        print(f"  Connettiti a Internet e riavvia il launcher.{CR}\n")
+        sys.exit(1)
+
+
+# ─── Local tool paths ─────────────────────────────────────────────────────────
+def _dotnet_local_exe() -> Path:
+    return DOTNET_DIR / ("dotnet.exe" if SYSTEM == "Windows" else "dotnet")
+
+
+def _node_local_exe() -> Path:
+    if SYSTEM == "Windows":
+        return NODE_DIR / "node.exe"
+    return NODE_DIR / "bin" / "node"
+
+
+def _npm_local_cmd() -> Path:
+    if SYSTEM == "Windows":
+        return NODE_DIR / "npm.cmd"
+    return NODE_DIR / "bin" / "npm"
+
+
+# ─── 1. Python version ───────────────────────────────────────────────────────
+def check_python_version():
+    major, minor = sys.version_info[:2]
+    if (major, minor) < (3, 10):
+        _err(f"Python {major}.{minor} rilevato — richiesto ≥ 3.10")
+        print(f"  Scarica Python da: https://www.python.org/downloads/")
+        sys.exit(1)
+    _ok(f"Python {major}.{minor}")
+
+
+# ─── 2. Python venv + dipendenze ─────────────────────────────────────────────
+def setup_python_venv():
+    venv_dir = ROOT / "AI.Brain" / ".venv"
+    req_file = ROOT / "AI.Brain" / "requirements.txt"
+
+    if SYSTEM == "Windows":
+        pip_exe = venv_dir / "Scripts" / "pip.exe"
+        py_exe  = venv_dir / "Scripts" / "python.exe"
+    else:
+        pip_exe = venv_dir / "bin" / "pip"
+        py_exe  = venv_dir / "bin" / "python"
+
+    # Crea il venv se non esiste
+    if not venv_dir.exists():
+        _step("Creazione virtual environment Python (AI.Brain/.venv)...")
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        _ok("Virtual environment creato")
+
+    # Verifica se le dipendenze sono già installate
+    probe = subprocess.run(
+        [str(py_exe), "-c", "import fastapi"],
+        capture_output=True
+    )
+    if probe.returncode != 0:
+        _require_internet()
+        _step("Installazione dipendenze Python (requirements.txt)...")
+        subprocess.run(
+            [str(pip_exe), "install", "-r", str(req_file)],
+            check=True
+        )
+        _ok("Dipendenze Python installate")
+    else:
+        _ok("Dipendenze Python già installate")
+
+
+# ─── 3. .NET SDK 10 ──────────────────────────────────────────────────────────
+def check_dotnet() -> bool:
+    """
+    Verifica che .NET SDK ≥ 10 sia disponibile (locale o di sistema).
+    Se mancante o troppo vecchio, installa localmente in .dotnet/.
+    """
+    # Prova prima l'eseguibile locale, poi quello di sistema
+    candidates = []
+    if _dotnet_local_exe().exists():
+        candidates.append(str(_dotnet_local_exe()))
+    if shutil.which("dotnet"):
+        candidates.append("dotnet")
+
+    for exe in candidates:
+        result = subprocess.run([exe, "--version"], capture_output=True, text=True)
+        if result.returncode == 0:
+            ver = result.stdout.strip()
+            major = int(ver.split(".")[0]) if ver.split(".")[0].isdigit() else 0
+            if major >= 10:
+                _ok(f".NET SDK {ver}")
+                return True
+            _warn(f".NET SDK {ver} trovato — richiesto ≥ 10, installo localmente...")
+            break
+    else:
+        _step(".NET SDK non trovato — installazione locale in .dotnet/ ...")
+
+    return _install_dotnet_local()
+
+
+def _install_dotnet_local() -> bool:
+    _require_internet()
+    DOTNET_DIR.mkdir(exist_ok=True)
+
+    if SYSTEM == "Windows":
+        script = ROOT / "_dotnet-install.ps1"
+        url    = "https://dot.net/v1/dotnet-install.ps1"
+    else:
+        script = ROOT / "_dotnet-install.sh"
+        url    = "https://dot.net/v1/dotnet-install.sh"
+
+    _step("Download script di installazione .NET...")
+    try:
+        urllib.request.urlretrieve(url, str(script))
+    except Exception as e:
+        _err(f"Download fallito: {e}")
+        _err("Installa manualmente: https://dotnet.microsoft.com/download/dotnet/10.0")
+        return False
+
+    _step("Installazione .NET SDK 10 in .dotnet/ (prima volta: qualche minuto)...")
+    try:
+        if SYSTEM == "Windows":
+            result = subprocess.run([
+                "powershell", "-ExecutionPolicy", "Bypass",
+                "-File", str(script),
+                "-InstallDir", str(DOTNET_DIR),
+                "-Channel", "10.0",
+            ])
+        else:
+            os.chmod(str(script), 0o755)
+            result = subprocess.run([
+                "bash", str(script),
+                "--install-dir", str(DOTNET_DIR),
+                "--channel", "10.0",
+            ])
+    finally:
+        script.unlink(missing_ok=True)  # pulizia script temporaneo
+
+    if result.returncode != 0:
+        _err("Installazione .NET fallita.")
+        _err("Installa manualmente: https://dotnet.microsoft.com/download/dotnet/10.0")
+        return False
+
+    _ok(".NET SDK 10 installato in .dotnet/")
+    return True
+
+
+# ─── 4. Node.js ──────────────────────────────────────────────────────────────
+def check_node() -> bool:
+    """
+    Verifica che Node.js ≥ 18 sia disponibile (locale o di sistema).
+    Se mancante o troppo vecchio, installa la versione portable in .node/.
+    """
+    candidates = []
+    if _node_local_exe().exists():
+        candidates.append(str(_node_local_exe()))
+    if shutil.which("node"):
+        candidates.append("node")
+
+    for exe in candidates:
+        result = subprocess.run([exe, "--version"], capture_output=True, text=True)
+        if result.returncode == 0:
+            ver = result.stdout.strip().lstrip("v")
+            major = int(ver.split(".")[0]) if ver.split(".")[0].isdigit() else 0
+            if major >= 18:
+                _ok(f"Node.js v{ver}")
+                return True
+            _warn(f"Node.js v{ver} trovato — richiesto ≥ 18, installo localmente...")
+            break
+    else:
+        _step("Node.js non trovato — installazione portable in .node/ ...")
+
+    return _install_node_local()
+
+
+def _install_node_local() -> bool:
+    _require_internet()
+    NODE_VERSION = "22.14.0"  # LTS
+
+    machine = platform.machine().lower()
+    if SYSTEM == "Windows":
+        arch  = "arm64" if "arm" in machine else "x64"
+        fname = f"node-v{NODE_VERSION}-win-{arch}.zip"
+        inner = f"node-v{NODE_VERSION}-win-{arch}"
+        url   = f"https://nodejs.org/dist/v{NODE_VERSION}/{fname}"
+    elif SYSTEM == "Darwin":
+        arch  = "arm64" if "arm" in machine else "x64"
+        fname = f"node-v{NODE_VERSION}-darwin-{arch}.tar.gz"
+        inner = f"node-v{NODE_VERSION}-darwin-{arch}"
+        url   = f"https://nodejs.org/dist/v{NODE_VERSION}/{fname}"
+    else:
+        arch  = "arm64" if ("aarch64" in machine or "arm" in machine) else "x64"
+        fname = f"node-v{NODE_VERSION}-linux-{arch}.tar.xz"
+        inner = f"node-v{NODE_VERSION}-linux-{arch}"
+        url   = f"https://nodejs.org/dist/v{NODE_VERSION}/{fname}"
+
+    archive = ROOT / fname
+    _step(f"Download Node.js v{NODE_VERSION} ({arch})...")
+    try:
+        urllib.request.urlretrieve(url, str(archive))
+    except Exception as e:
+        _err(f"Download fallito: {e}")
+        _err("Installa manualmente: https://nodejs.org/")
+        return False
+
+    _step("Estrazione Node.js in .node/ ...")
+    try:
+        if SYSTEM == "Windows":
+            with zipfile.ZipFile(str(archive), "r") as zf:
+                zf.extractall(str(ROOT))
+        else:
+            with tarfile.open(str(archive), "r:*") as tf:
+                try:
+                    tf.extractall(str(ROOT), filter="data")
+                except TypeError:
+                    tf.extractall(str(ROOT))  # Python < 3.12
+
+        extracted = ROOT / inner
+        if extracted.exists():
+            if NODE_DIR.exists():
+                shutil.rmtree(str(NODE_DIR))
+            extracted.rename(NODE_DIR)
+        else:
+            _err("Cartella estratta non trovata.")
+            return False
+    except Exception as e:
+        _err(f"Estrazione fallita: {e}")
+        return False
+    finally:
+        archive.unlink(missing_ok=True)  # pulizia archivio temporaneo
+
+    _ok(f"Node.js v{NODE_VERSION} installato in .node/")
+    return True
+
+
+# ─── 5. npm install dashboard ─────────────────────────────────────────────────
+def setup_node_modules():
+    nm  = ROOT / "dashboard-bmo" / "node_modules"
+    pkg = ROOT / "dashboard-bmo" / "package.json"
+
+    if not pkg.exists():
+        _warn("dashboard-bmo/package.json non trovato — skip npm install")
+        return
+
+    if nm.exists() and any(nm.iterdir()):
+        _ok("Dipendenze npm già installate")
+        return
+
+    _require_internet()
+    _step("Installazione dipendenze npm del dashboard (prima volta: qualche minuto)...")
+    npm = str(_npm_local_cmd()) if _npm_local_cmd().exists() else (
+        "npm.cmd" if SYSTEM == "Windows" else "npm"
+    )
+    result = subprocess.run([npm, "install"], cwd=str(ROOT / "dashboard-bmo"))
+    if result.returncode == 0:
+        _ok("Dipendenze npm installate")
+    else:
+        _err("npm install fallito — il dashboard potrebbe non avviarsi correttamente")
+
+
+# ─── Entry point dipendenze ───────────────────────────────────────────────────
+def check_dependencies() -> dict:
+    """
+    Controlla e installa tutte le dipendenze necessarie.
+    Ritorna {"dotnet": bool, "node": bool}.
+    """
+    print(f"\n{CB}── Verifica dipendenze ──────────────────────────────────{CR}\n")
+
+    check_python_version()
+    setup_python_venv()
+
+    dotnet_ok = check_dotnet()
+    if not dotnet_ok:
+        _warn("Bmo.Api (.NET) non potrà avviarsi — installa .NET SDK 10 manualmente")
+        print(f"  {CR2}  → https://dotnet.microsoft.com/download/dotnet/10.0{CR}")
+
+    node_ok = check_node()
+    if not node_ok:
+        _warn("Dashboard (Node.js) non potrà avviarsi — installa Node.js manualmente")
+        print(f"  {CR2}  → https://nodejs.org/{CR}")
+    else:
+        setup_node_modules()
+
+    print()
+    return {"dotnet": dotnet_ok, "node": node_ok}
 
 
 # ─── Config I/O ──────────────────────────────────────────────────────────────
@@ -294,14 +612,31 @@ def start_services(config: dict):
     launch_terminal("B.M.O. | AI.Brain", ai_cmd, ROOT / "AI.Brain")
     time.sleep(0.4)
 
-    # 2 — Bmo.Api  (.NET)
-    api_cmd = f'dotnet run --launch-profile http --urls "http://localhost:{api_port}"'
+    # 2 — Bmo.Api  (.NET) — usa eseguibile locale se installato
+    dotnet_exe = (
+        str(_dotnet_local_exe())
+        if _dotnet_local_exe().exists()
+        else "dotnet"
+    )
+    api_cmd = f'"{dotnet_exe}" run --launch-profile http --urls "http://localhost:{api_port}"'
     print(f"  {CG}▶{CR} Bmo.Api (.NET)  → http://localhost:{api_port}")
     launch_terminal("B.M.O. | API Gateway", api_cmd, ROOT / "Bmo.Api")
     time.sleep(0.4)
 
-    # 3 — Dashboard  (Next.js)
-    dash_cmd = f'npm run dev -- --port {dash_port}'
+    # 3 — Dashboard  (Next.js) — usa npm locale se installato
+    #     Se node è locale, prefissa il PATH nel comando del terminale
+    #     così npm può trovare node durante l'esecuzione di next dev
+    if _npm_local_cmd().exists():
+        npm_cmd  = str(_npm_local_cmd())
+        node_bin = str(NODE_DIR) if SYSTEM == "Windows" else str(NODE_DIR / "bin")
+        if SYSTEM == "Windows":
+            path_prefix = f'set "PATH={node_bin};%PATH%" && '
+        else:
+            path_prefix = f'export PATH="{node_bin}:$PATH" && '
+        dash_cmd = f'{path_prefix}"{npm_cmd}" run dev -- --port {dash_port}'
+    else:
+        dash_cmd = f'npm run dev -- --port {dash_port}'
+
     print(f"  {CG}▶{CR} Dashboard       → http://localhost:{dash_port}")
     launch_terminal("B.M.O. | Dashboard", dash_cmd, ROOT / "dashboard-bmo")
 
@@ -317,6 +652,8 @@ def start_services(config: dict):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
     print_header()
+
+    check_dependencies()
 
     config = load_config()
     env    = load_env(ENV_PATH)

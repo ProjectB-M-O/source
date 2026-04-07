@@ -29,6 +29,12 @@ workspace/bmo_agent.db
 # I file creati dall'agente non vanno in repo (opzionale: rimuovi se vuoi tracciarli)
 workspace/files/
 
+# ── Dipendenze locali (gestite da start.py) ───────────────────────────────────
+# .NET SDK installato localmente da start.py
+.dotnet/
+# Node.js portable installato localmente da start.py
+.node/
+
 # ── Launcher ─────────────────────────────────────────────────────────────────
 # Log file di fallback creati da start.py su Linux senza terminale GUI
 *.log
