@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m venv venv)",
+      "Bash(xargs grep:*)",
+      "Bash(python -c ':*)",
+      "Bash(find \"/c/Users/matte/Desktop/BMO P/source/AI.Voice/venv/Lib/site-packages/fairseq\" -name \"*.pyc\" -delete)",
+      "Bash(curl:*)",
+      "Bash(find \"/c/Users/matte/Desktop/BMO P/source/AI.Voice\" -name \"pipeline.cpython*.pyc\" -delete)",
+      "Bash(grep -v \"^[0-9]*:$\")",
+      "Bash(python3 -c ':*)",
+      "Bash(python3:*)",
+      "Bash(find \"C:\\\\Users\\\\matte\\\\Desktop\\\\BMO P\\\\source\\\\AI.Voice\" -name \"*.pyc\" -delete)",
+      "Bash(find \"C:\\\\Users\\\\matte\\\\Desktop\\\\BMO P\\\\source\\\\AI.Voice\" -maxdepth 2 -name \"*.pyc\" -delete)",
+      "Bash(find \"C:\\\\Users\\\\matte\\\\Desktop\\\\BMO P\\\\source\\\\AI.Voice\" -maxdepth 2 -name \"__pycache__\" -type d -exec rm -rf {} +)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /F /FI \"PID gt 0\" /FI \"IMAGENAME eq python.exe\")",
+      "Bash(powershell -Command \"Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(rm -f server.log)",
+      "Bash(venv/Scripts/python server.py)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(venv/Scripts/python -c \"print\\('python ok'\\)\")",
+      "Bash(start \"\" /B venv\\\\\\\\Scripts\\\\\\\\python.exe server.py)",
+      "Bash(powershell -Command \"Start-Process -FilePath 'venv\\\\\\\\Scripts\\\\\\\\python.exe' -ArgumentList 'server.py' -WorkingDirectory \\(Get-Location\\) -RedirectStandardOutput 'server_stdout.txt' -RedirectStandardError 'server_stderr.txt' -NoNewWindow\")",
+      "Bash(powershell:*)"
+    ]
+  }
+}
