@@ -26,7 +26,21 @@
       "Bash(grep -E \"\\\\.\\(bat|py|sh|txt|json|cfg|toml\\)$\")",
       "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe list:*)",
       "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe install:*)",
-      "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe index:*)"
+      "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe index:*)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?|json\\)$\")",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git worktree:*)",
+      "Bash(git:*)",
+      "Bash(dotnet build:*)",
+      "Bash(npm run:*)",
+      "Bash(./node_modules/.bin/next build:*)",
+      "Bash(npm install:*)",
+      "Bash(chmod +x \"C:/Users/matte/Desktop/source/.worktrees/v0.4/bmo\")",
+      "Bash(echo \"chmod done \\(exit $?\\)\")",
+      "Bash(python bmo_cli.py --help)",
+      "Bash(grep:*)"
     ]
   }
 }

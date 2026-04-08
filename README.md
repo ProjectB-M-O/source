@@ -8,6 +8,8 @@ Sistema multi-servizio per un assistente conversazionale con:
 
 L'avvio è pensato per essere "one command": `start.py` installa le dipendenze (anche .NET/Node in locale se servono) e apre ogni servizio in un terminale separato.
 
+Dalla v0.4 è disponibile anche il CLI globale `bmo` per gestire il progetto da terminale.
+
 ---
 
 ## Architettura
@@ -37,8 +39,11 @@ source/
 ├── start.py
 ├── start.bat
 ├── start.sh
+├── bmo_cli.py                # CLI globale (bmo --help / -onboard / -config / --dev)
+├── bmo.bat                   # wrapper Windows per il CLI
+├── bmo                       # wrapper bash per il CLI
 ├── AI.Brain/                 # FastAPI + loop LLM + tool calling
-│   ├── app.py
+│   ├── app.py                # + persistenza SQLite sessioni (workspace/brain.db)
 │   ├── requirements.txt
 │   ├── .env                  # OPENROUTER_API_KEY, DOTNET_API_URL, ecc.
 │   └── AInterface/request.py
@@ -55,7 +60,7 @@ source/
 │   ├── models/bmo/            # model.onnx + model.onnx.json (forniti a mano)
 │   └── audio_out/             # WAV generati (cleanup "rolling")
 └── dashboard-bmo/            # Next.js UI
-    └── package.json
+    └── package.json          # + @monaco-editor/react per la tab Skills
 ```
 
 ---
@@ -86,6 +91,8 @@ python start.py
 ```
 
 Al primo avvio parte un wizard che chiede:
+
+> **Nota v0.4:** `start.py` registra automaticamente il comando `bmo` nel PATH utente. Riapri il terminale per usarlo.
 - `agent.model` (modello OpenRouter)
 - `OPENROUTER_API_KEY` (obbligatoria, salvata in `AI.Brain/.env`)
 - porte dei servizi (AI.Brain, Bmo.Api, dashboard)
@@ -97,6 +104,24 @@ Alla fine, `start.py`:
 - installa (se serve) `.NET` e `Node.js` localmente
 - esegue `npm install` per `dashboard-bmo/` (prima volta)
 - avvia i servizi in terminali separati e apre il browser sul dashboard
+
+---
+
+## CLI `bmo`
+
+Dalla v0.4 il progetto espone un CLI globale. Dopo il primo avvio di `start.py` (che registra il PATH), puoi usare:
+
+```bash
+bmo --help              # mostra tutti i comandi
+bmo -onboard            # ri-wizard di configurazione (preserva dati e sessioni)
+bmo -config             # editor interattivo del config (live / restart / credenziali)
+bmo --dev on|off        # toggle dev_mode senza restart
+```
+
+`bmo -config` mostra un menu numerato con tre sezioni:
+- **LIVE** — modifiche applicate senza restart
+- **⚠ RICHIEDE RESTART** — porte, workspace_path (restart automatico se modificate)
+- **🔑 CREDENZIALI** — valori di `AI.Brain/.env` (API key mascherata)
 
 ---
 
@@ -236,15 +261,30 @@ npm run dev -- --port 3000
 
 ---
 
+## Dashboard — tab e funzionalità
+
+| Tab | Descrizione |
+|---|---|
+| **Chat** | Conversazione con BMO. Streaming SSE, tool calls visibili, audio TTS inline (dev_mode). `/new` per nuova sessione |
+| **Skills** | Lista delle skill dell'agente. Monaco editor per modificare i file `.md`. Pulsante “＋ Nuova Skill” per crearne di nuove |
+| **Impostazioni** | Config live (agente, tool, contesto), sezione Servizi (read-only), AI Voice, e Credenziali (API key con show/hide) |
+
+**Persistenza sessione (v0.4):** i messaggi sopravvivono al refresh della pagina. La sessione viene azzerata solo con `/new` nella chat.
+
+---
+
 ## Troubleshooting rapido
 
-- `OPENROUTER_API_KEY non configurata` → rilancia `start.py` e scegli “modifica impostazioni”, oppure aggiorna `AI.Brain/.env`.
-- Porta occupata → cambia `services.*.port` in `Bmo.Api/bmo_config.json` e rilancia `start.py`.
+- `OPENROUTER_API_KEY non configurata` → usa `bmo -config` oppure aggiorna `AI.Brain/.env` direttamente.
+- Porta occupata → `bmo -config` → sezione ⚠ RICHIEDE RESTART → modifica la porta → restart automatico.
 - TTS non parte → verifica che `model.onnx` e `model.onnx.json` siano in `AI.Voice/models/bmo/`.
+- Sessione non persistita → verifica che `workspace/brain.db` esista e sia scrivibile.
 
 ---
 
 ## Version
+
+**v0.4** — Session persistence (SQLite in AI.Brain), Skills tab con Monaco editor, settings aggiornati (Servizi/AI Voice/Credenziali), CLI globale `bmo` con `-onboard`, `-config`, `--dev`.
 
 **v0.3** — Trained Piper model for BMO + implemented/fixed onboarding that fully installs and boots the whole app end-to-end.
 
