@@ -19,6 +19,6 @@ You can store and retrieve information across different sessions using the built
 
 ```
 save_memory("user_name", "Matteo", "user")
-save_memory("user_prefers_italian", "true", "preference")
+save_memory("user_prefers_english", "true", "preference")
 query_memory("user")  → returns all entries with 'user' in key/value/category
 ```

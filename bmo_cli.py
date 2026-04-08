@@ -6,6 +6,9 @@ Usage:
   bmo -onboard        Re-run onboarding wizard (preserves data)
   bmo -config         Interactive config editor (live + restart-required keys)
   bmo --dev on|off    Toggle dev_mode in bmo_config.json
+    bmo start           Start all services (managed mode)
+    bmo reload          Restart all services (managed mode)
+    bmo quit            Stop all services started via `bmo start`
 """
 
 import sys
@@ -119,7 +122,70 @@ def cmd_help():
         - Credenziali (.env)
       Se vengono modificate chiavi che richiedono restart,
       i servizi vengono riavviati automaticamente.
+
+  {CG}bmo start{CR}
+      Avvia tutti i servizi in modalita' gestita (background + log su workspace/logs).
+
+  {CG}bmo reload{CR}
+      Riavvia tutti i servizi (equivale a quit + start).
+
+  {CG}bmo quit{CR}
+      Ferma tutti i servizi avviati tramite {CG}bmo start{CR}.
 """)
+
+
+def _ensure_onboarded(config: dict) -> None:
+    if not config.get("onboard_done", False):
+        print(f"{CR2}Configurazione non completata.{CR}")
+        print(f"Esegui prima {CG}bmo -onboard{CR} (oppure {CG}python start.py{CR}).")
+        sys.exit(1)
+
+
+def cmd_start():
+    _s.print_header()
+
+    # Ensure config/services exist and env is synced (no path/system changes).
+    config = _s.load_config()
+    env    = _s.load_env(_s.ENV_PATH)
+
+    if _s.ensure_services(config):
+        _s.save_config(config)
+
+    _ensure_onboarded(config)
+
+    _s.sync_ai_env(config, env)
+    _s.sync_dashboard_env(config)
+    _s.save_env(_s.ENV_PATH, env)
+
+    _s.check_dependencies()
+    _s.setup_voice_venv_if_enabled(config)
+
+    _s.start_services_managed(config)
+
+
+def cmd_quit():
+    _s.print_header()
+    _s.stop_services_managed()
+
+
+def cmd_reload():
+    _s.print_header()
+    _s.stop_services_managed()
+
+    config = _s.load_config()
+    env    = _s.load_env(_s.ENV_PATH)
+    if _s.ensure_services(config):
+        _s.save_config(config)
+
+    _ensure_onboarded(config)
+    _s.sync_ai_env(config, env)
+    _s.sync_dashboard_env(config)
+    _s.save_env(_s.ENV_PATH, env)
+
+    _s.check_dependencies()
+    _s.setup_voice_venv_if_enabled(config)
+
+    _s.start_services_managed(config)
 
 
 # ─── --dev on|off ─────────────────────────────────────────────────────────────
@@ -316,6 +382,12 @@ def main():
         cmd_onboard()
     elif cmd == "-config":
         cmd_config()
+    elif cmd == "start":
+        cmd_start()
+    elif cmd == "reload":
+        cmd_reload()
+    elif cmd == "quit":
+        cmd_quit()
     else:
         print(f"{CR2}Comando sconosciuto: {cmd}{CR}")
         print(f"Usa {CG}bmo --help{CR} per la lista dei comandi.")

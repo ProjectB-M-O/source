@@ -18,6 +18,7 @@ import urllib.request
 import zipfile
 import tarfile
 from pathlib import Path
+import signal
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).parent.absolute()
@@ -29,6 +30,11 @@ NODE_DIR    = ROOT / ".node"     # installazione Node.js locale
 VOICE_DIR   = ROOT / "AI.Voice"  # server TTS (Flask + Piper + RVC)
 
 SYSTEM = platform.system()  # "Windows" | "Linux" | "Darwin"
+
+# ─── Managed services (CLI start/stop) ───────────────────────────────────────
+# Used by bmo_cli.py for `bmo start|reload|quit`.
+SERVICE_STATE_PATH = ROOT / "workspace" / "services_state.json"
+SERVICE_LOG_DIR    = ROOT / "workspace" / "logs"
 
 # ─── ANSI colors (skip on plain Windows console) ─────────────────────────────
 _use_color = (
@@ -756,11 +762,277 @@ def start_services(config: dict):
     print(f"\n  {CG}{CB}Tutti i servizi sono stati avviati.{CR}\n")
 
 
+# ─── Managed service controller (PID + logs) ────────────────────────────────
+def _ensure_log_dir() -> None:
+    SERVICE_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _write_service_state(state: dict) -> None:
+    SERVICE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SERVICE_STATE_PATH.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _read_service_state() -> dict:
+    try:
+        return json.loads(SERVICE_STATE_PATH.read_text(encoding="utf-8")) if SERVICE_STATE_PATH.exists() else {}
+    except Exception:
+        return {}
+
+
+def _spawn_background(
+    args: list[str],
+    *,
+    title: str,
+    cwd: Path,
+    env: dict | None = None,
+) -> int:
+    """Spawn a long-running process in the background and return its PID."""
+    _ensure_log_dir()
+    log_path = SERVICE_LOG_DIR / f"{title}.log"
+    log_f = open(log_path, "a", encoding="utf-8")
+
+    popen_kwargs = {
+        "cwd": str(cwd),
+        "stdout": log_f,
+        "stderr": log_f,
+        "env": env,
+    }
+
+    if SYSTEM == "Windows":
+        # New process group so taskkill /T works reliably.
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(args, **popen_kwargs)
+    return int(proc.pid)
+
+
+def _kill_pid(pid: int) -> bool:
+    if pid <= 0:
+        return False
+
+    if SYSTEM == "Windows":
+        result = subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+
+    try:
+        # Kill the whole process group if possible (start_new_session=True).
+        killpg = getattr(os, "killpg", None)
+        if callable(killpg):
+            killpg(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+        return True
+    except Exception:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            return True
+        except Exception:
+            return False
+
+
+def start_services_managed(config: dict, *, open_browser: bool = True) -> dict:
+    """Start all services in background (no extra terminal windows).
+
+    Writes PID/logs under workspace/ so `bmo quit` can stop everything reliably.
+    Returns the written state dict.
+    """
+    svc = config["services"]
+
+    python_exe = get_python_exe()
+    ai_port   = int(svc["ai_brain"]["port"])
+    api_port  = int(svc["bmo_api"]["port"])
+    dash_port = int(svc["dashboard"]["port"])
+
+    state = {
+        "started_at": time.time(),
+        "services": {},
+    }
+
+    print(f"\n{CB}Starting services (managed mode)...{CR}\n")
+
+    # 1 — AI.Brain
+    ai_pid = _spawn_background(
+        [python_exe, "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", str(ai_port)],
+        title="ai_brain",
+        cwd=ROOT / "AI.Brain",
+    )
+    print(f"  {CG}▶{CR} AI.Brain        → http://localhost:{ai_port}  (pid {ai_pid})")
+    state["services"]["ai_brain"] = {"pid": ai_pid, "port": ai_port}
+
+    # 2 — Bmo.Api
+    dotnet_exe = str(_dotnet_local_exe()) if _dotnet_local_exe().exists() else "dotnet"
+    api_pid = _spawn_background(
+        [dotnet_exe, "run", "--launch-profile", "http", "--urls", f"http://localhost:{api_port}"],
+        title="bmo_api",
+        cwd=ROOT / "Bmo.Api",
+    )
+    print(f"  {CG}▶{CR} Bmo.Api (.NET)  → http://localhost:{api_port}  (pid {api_pid})")
+    state["services"]["bmo_api"] = {"pid": api_pid, "port": api_port}
+
+    # 3 — AI.Voice (optional)
+    voice_cfg = svc.get("ai_voice", {})
+    if voice_cfg.get("enabled", False):
+        voice_port = int(voice_cfg.get("port", 5050))
+        voice_py   = _voice_py_exe()
+        if voice_py.exists():
+            voice_pid = _spawn_background(
+                [str(voice_py), "server.py"],
+                title="ai_voice",
+                cwd=VOICE_DIR,
+            )
+            print(f"  {CG}▶{CR} AI.Voice (TTS) → http://localhost:{voice_port}  (pid {voice_pid})")
+            state["services"]["ai_voice"] = {"pid": voice_pid, "port": voice_port}
+        else:
+            _warn("AI.Voice venv non trovato — esegui start.py per installarlo")
+
+    # 4 — Dashboard
+    dash_env = os.environ.copy()
+    if _npm_local_cmd().exists():
+        npm_cmd  = str(_npm_local_cmd())
+        node_bin = str(NODE_DIR) if SYSTEM == "Windows" else str(NODE_DIR / "bin")
+
+        if SYSTEM == "Windows":
+            dash_env["PATH"] = f"{node_bin};{dash_env.get('PATH', '')}"
+            dash_pid = _spawn_background(
+                ["cmd", "/c", npm_cmd, "run", "dev", "--", "--port", str(dash_port)],
+                title="dashboard",
+                cwd=ROOT / "dashboard-bmo",
+                env=dash_env,
+            )
+        else:
+            dash_env["PATH"] = f"{node_bin}:{dash_env.get('PATH', '')}"
+            dash_pid = _spawn_background(
+                [npm_cmd, "run", "dev", "--", "--port", str(dash_port)],
+                title="dashboard",
+                cwd=ROOT / "dashboard-bmo",
+                env=dash_env,
+            )
+    else:
+        if SYSTEM == "Windows":
+            dash_pid = _spawn_background(
+                ["cmd", "/c", "npm", "run", "dev", "--", "--port", str(dash_port)],
+                title="dashboard",
+                cwd=ROOT / "dashboard-bmo",
+                env=dash_env,
+            )
+        else:
+            dash_pid = _spawn_background(
+                ["npm", "run", "dev", "--", "--port", str(dash_port)],
+                title="dashboard",
+                cwd=ROOT / "dashboard-bmo",
+                env=dash_env,
+            )
+
+    print(f"  {CG}▶{CR} Dashboard       → http://localhost:{dash_port}  (pid {dash_pid})")
+    state["services"]["dashboard"] = {"pid": dash_pid, "port": dash_port}
+
+    _write_service_state(state)
+
+    if open_browser:
+        dash_url = f"http://localhost:{dash_port}"
+        print(f"\n  {CY}Opening browser → {dash_url}{CR}")
+        try:
+            webbrowser.open(dash_url)
+        except Exception:
+            pass
+
+    print(f"\n  {CG}{CB}Services started (managed). Logs: workspace/logs/{CR}\n")
+    return state
+
+
+def stop_services_managed(*, keep_state: bool = False) -> bool:
+    """Stop services previously started by start_services_managed()."""
+    state = _read_service_state()
+    services = state.get("services", {}) if isinstance(state, dict) else {}
+
+    if not services:
+        _warn("No managed service state found (services_state.json). Nothing to stop.")
+        return False
+
+    print(f"\n{CB}Stopping services (managed mode)...{CR}\n")
+    any_killed = False
+
+    # Stop in reverse order (dashboard first)
+    stop_order = ["dashboard", "ai_voice", "bmo_api", "ai_brain"]
+    for name in stop_order:
+        meta = services.get(name)
+        if not isinstance(meta, dict):
+            continue
+        pid = int(meta.get("pid", 0) or 0)
+        if pid <= 0:
+            continue
+
+        ok = _kill_pid(pid)
+        if ok:
+            any_killed = True
+            _ok(f"Stopped {name} (pid {pid})")
+        else:
+            _warn(f"Failed to stop {name} (pid {pid})")
+
+    # Give the OS a moment to release ports/resources before a possible restart.
+    try:
+        time.sleep(0.6)
+    except Exception:
+        pass
+
+    if not keep_state:
+        try:
+            SERVICE_STATE_PATH.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    return any_killed
+
+
 # ─── CLI PATH registration ───────────────────────────────────────────────────
 def _bmo_in_path() -> bool:
-    """Check if 'bmo' command is accessible."""
-    import shutil as _shutil
-    return _shutil.which("bmo") is not None
+    """Return True if the project root directory is already on PATH.
+
+    NOTE: We intentionally do NOT rely on shutil.which('bmo') on Windows,
+    because when running from the project root it may resolve '.\\bmo.bat'
+    (current directory) even if the directory is not actually in PATH.
+    """
+
+    project_root = str(ROOT)
+
+    def _path_has_dir(path_value: str) -> bool:
+        if not path_value:
+            return False
+        target = os.path.normcase(os.path.normpath(project_root))
+        for part in path_value.split(os.pathsep):
+            part = part.strip().strip('"')
+            if not part:
+                continue
+            if os.path.normcase(os.path.normpath(part)) == target:
+                return True
+        return False
+
+    # Process PATH first (covers current shell/session)
+    if _path_has_dir(os.environ.get("PATH", "")):
+        return True
+
+    # Windows: also check persisted user PATH (HKCU\Environment)
+    if SYSTEM == "Windows":
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ)
+            try:
+                user_path, _ = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                user_path = ""
+            finally:
+                winreg.CloseKey(key)
+            return _path_has_dir(user_path)
+        except Exception:
+            return False
+
+    return False
 
 
 def register_cli_in_path():

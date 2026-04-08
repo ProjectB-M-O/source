@@ -1,7 +1,7 @@
 {
   "version": "0.1",
   "onboard_done": true,
-  "dev_mode": true,
+  "dev_mode": false,
   "workspace_path": "../workspace",
   "services": {
     "ai_brain": {

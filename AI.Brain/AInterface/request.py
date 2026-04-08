@@ -53,11 +53,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Legge un file dalla workspace dell'agente.",
+            "description": "Read a file from the agent workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Percorso relativo a workspace/files/"}
+                    "path": {"type": "string", "description": "Path relative to workspace/files/"}
                 },
                 "required": ["path"]
             }
@@ -67,7 +67,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Scrive o sovrascrive un file nella workspace.",
+            "description": "Write or overwrite a file in the workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -82,11 +82,11 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_files",
-            "description": "Elenca file nella workspace.",
+            "description": "List files in the workspace.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Sotto-cartella opzionale"}
+                    "path": {"type": "string", "description": "Optional subfolder"}
                 },
                 "required": []
             }
@@ -96,7 +96,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "query_memory",
-            "description": "Cerca nella memoria persistente dell'agente.",
+            "description": "Search the agent's persistent memory.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -110,13 +110,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "save_memory",
-            "description": "Salva o aggiorna una voce nella memoria persistente.",
+            "description": "Save or update an entry in persistent memory.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "key":      {"type": "string"},
                     "value":    {"type": "string"},
-                    "category": {"type": "string", "description": "es. 'user', 'task', 'note'"}
+                    "category": {"type": "string", "description": "e.g. 'user', 'task', 'note'"}
                 },
                 "required": ["key", "value"]
             }
@@ -126,7 +126,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_identity",
-            "description": "Legge il proprio identity.json.",
+            "description": "Read the agent's identity.json.",
             "parameters": {"type": "object", "properties": {}, "required": []}
         }
     },
@@ -134,12 +134,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "update_identity",
-            "description": "Aggiorna un campo del proprio identity.json.",
+            "description": "Update a field in identity.json.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "field": {"type": "string"},
-                    "value": {"description": "Nuovo valore (qualsiasi tipo JSON)"}
+                    "value": {"description": "New value (any JSON type)"}
                 },
                 "required": ["field", "value"]
             }
@@ -149,7 +149,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_skills",
-            "description": "Legge il proprio skills.json.",
+            "description": "Read the agent's skills.json.",
             "parameters": {"type": "object", "properties": {}, "required": []}
         }
     },
@@ -157,14 +157,14 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "update_skills",
-            "description": "Aggiunge o rimuove una skill. Crea automaticamente un file MD dedicato.",
+            "description": "Add or remove a skill. Automatically creates a dedicated MD file.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "action":          {"type": "string", "enum": ["add", "remove"]},
-                    "skill_name":      {"type": "string", "description": "Nome della skill"},
-                    "description":     {"type": "string", "description": "Descrizione breve (per add)"},
-                    "initial_content": {"type": "string", "description": "Contenuto Markdown completo del file skill (per add)"}
+                    "skill_name":      {"type": "string", "description": "Skill name"},
+                    "description":     {"type": "string", "description": "Short description (for add)"},
+                    "initial_content": {"type": "string", "description": "Full Markdown content for the skill file (for add)"}
                 },
                 "required": ["action", "skill_name"]
             }
@@ -187,7 +187,7 @@ def _build_system_prompt() -> str:
     skills   = _load_json_file("skills.json")
 
     name    = identity.get("name", "B.M.O.")
-    persona = identity.get("persona", "Sei un assistente AI.")
+    persona = identity.get("persona", "You are an AI assistant.")
 
     # Carica ogni skill dal suo file MD
     skills_text = ""
@@ -204,17 +204,18 @@ def _build_system_prompt() -> str:
             skills_text += f"\n- {cap}\n"
 
     learned = skills.get("learned_behaviors", [])
-    learned_text = "\n".join(f"  - {b}" for b in learned) or "  (nessuno)"
+    learned_text = "\n".join(f"  - {b}" for b in learned) or "  (none)"
 
     return (
-        f"Sei {name}.\n{persona}\n\n"
-        f"== Le tue capacità ==\n{skills_text}\n"
-        f"== Comportamenti appresi ==\n{learned_text}\n\n"
-        "== REGOLA FONDAMENTALE SUI TOOL ==\n"
-        "Quando vuoi usare un tool, chiamalo DIRETTAMENTE tramite il meccanismo di function calling. "
-        "NON scrivere mai codice Python (es. `print(write_file(...))`) nel tuo testo. "
-        "Usa SEMPRE il function call nativo — il sistema lo eseguirà automaticamente e ti darà il risultato. "
-        "Quando apprendi informazioni rilevanti sull'utente, salvale con save_memory."
+        f"You are {name}.\n{persona}\n\n"
+        "Output rules: respond in English only; do not use emojis or emoticons.\n\n"
+        f"== Your capabilities ==\n{skills_text}\n"
+        f"== Learned behaviors ==\n{learned_text}\n\n"
+        "== TOOL USE RULE ==\n"
+        "When you want to use a tool, call it DIRECTLY via function calling. "
+        "Do NOT write Python code in your message text (e.g. `print(write_file(...))`). "
+        "Always use native tool calls — the system will execute them and return the result. "
+        "When you learn relevant information about the user, store it with save_memory."
     )
 
 # ── Context management ────────────────────────────────────────────────────────
@@ -235,7 +236,7 @@ def _prune_history(history: list[dict]) -> list[dict]:
     limit     = int(max_tok * threshold)
 
     while _estimate_tokens(history) > limit and len(history) > 2:
-        history = history[2:]  # Rimuove la coppia più vecchia user+assistant
+        history = history[2:]  # Remove the oldest user+assistant pair
     return history
 
 # ── Tool execution via .NET gatekeeper ───────────────────────────────────────
@@ -247,9 +248,9 @@ async def _call_tool(tool_name: str, arguments: dict) -> str:
             resp = await http.post(f"{DOTNET_API_URL}/api/tools/execute", json=payload)
             resp.raise_for_status()
             data = resp.json()
-            return data.get("result", "") if data.get("success") else f"[Errore] {data.get('error', 'sconosciuto')}"
+            return data.get("result", "") if data.get("success") else f"[Error] {data.get('error', 'unknown')}"
     except Exception as e:
-        return f"[Errore .NET] {e}"
+        return f"[.NET error] {e}"
 
 # ── Non-streaming run (retrocompatibilità) ────────────────────────────────────
 
@@ -283,7 +284,7 @@ async def run(message: str, history: list[dict]) -> tuple[str, list[dict]]:
             result = await _call_tool(tc.function.name, args)
             history.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
-    return "Ho raggiunto il limite di iterazioni.", history
+    return "I reached the maximum number of tool iterations.", history
 
 # ── Streaming run ─────────────────────────────────────────────────────────────
 

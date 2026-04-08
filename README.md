@@ -116,6 +116,9 @@ bmo --help              # mostra tutti i comandi
 bmo -onboard            # ri-wizard di configurazione (preserva dati e sessioni)
 bmo -config             # editor interattivo del config (live / restart / credenziali)
 bmo --dev on|off        # toggle dev_mode senza restart
+bmo start               # avvia tutti i servizi (modalità gestita: log in workspace/logs)
+bmo reload              # restart di tutti i servizi (quit + start)
+bmo quit                # ferma i servizi avviati tramite `bmo start`
 ```
 
 `bmo -config` mostra un menu numerato con tre sezioni:

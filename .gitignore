@@ -13,6 +13,8 @@ AI.Brain/__pycache__/
 AI.Brain/**/__pycache__/
 AI.Brain/**/*.pyc
 AI.Brain/**/*.pyo
+__pycache__/
+*.pyc
 
 # Secrets — NON caricare mai
 AI.Brain/.env
@@ -25,6 +27,7 @@ dashboard-bmo/.env*.local
 # ── Workspace runtime ─────────────────────────────────────────────────────────
 # Il DB SQLite è generato a runtime, non va in repo
 workspace/bmo_agent.db
+workspace/brain.db
 
 # I file creati dall'agente non vanno in repo (opzionale: rimuovi se vuoi tracciarli)
 workspace/files/
@@ -64,3 +67,4 @@ AI.Voice/server_stderr.txt
 *.iml
 .DS_Store
 Thumbs.db
+
