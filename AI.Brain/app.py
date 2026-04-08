@@ -38,6 +38,8 @@ def _init_db() -> None:
                 created_at TEXT NOT NULL,
                 is_active INTEGER NOT NULL DEFAULT 1
             );
+
+            CREATE INDEX IF NOT EXISTS idx_ch_session ON conversation_history(session_id);
         """)
 
 
@@ -63,14 +65,14 @@ def _get_active_session() -> str | None:
     return row["id"] if row else None
 
 
-def _get_session_messages(session_id: str) -> list[sqlite3.Row]:
+def _get_session_messages(session_id: str) -> list[dict]:
     with _get_conn() as conn:
         rows = conn.execute(
             "SELECT role, content, created_at FROM conversation_history "
             "WHERE session_id=? ORDER BY id ASC",
             (session_id,),
         ).fetchall()
-    return rows
+    return [dict(row) for row in rows]
 
 
 def _save_message(session_id: str, role: str, content: str) -> None:
@@ -93,6 +95,7 @@ def _deactivate_session(session_id: str) -> None:
 
 _init_db()
 
+# NOTE: single-user service, no concurrency assumed
 _session_id: str = _get_active_session() or _create_session()
 
 # Load history (user + assistant only — tool rows not stored)
@@ -110,8 +113,8 @@ async def chat(request: ChatRequest):
     global _history
     if not OPENROUTER_API_KEY:
         raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY non configurata.")
-    reply, _history = await run(request.message, _history)
     _save_message(_session_id, "user", request.message)
+    reply, _history = await run(request.message, _history)
     _save_message(_session_id, "assistant", reply)
     return ChatResponse(reply=reply)
 
@@ -122,11 +125,13 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY non configurata.")
 
     async def _streaming_wrapper():
+        # Save user message before streaming starts so it's persisted even if the LLM call fails.
+        _save_message(_session_id, "user", request.message)
+        # NOTE: _history is mutated in-place by run_streaming; saves happen post-mutation.
         async for chunk in run_streaming(request.message, _history):
             yield chunk
         # After generator exhausts, history has been mutated by run_streaming.
-        # Save user message and last assistant message.
-        _save_message(_session_id, "user", request.message)
+        # Save the assistant reply.
         # The last assistant entry is the final item with role=assistant in _history.
         assistant_content = ""
         for entry in reversed(_history):
