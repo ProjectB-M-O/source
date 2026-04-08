@@ -23,6 +23,12 @@ type BmoConfig = {
     version: string;
     workspace_path: string;
     dev_mode: boolean;
+    services: {
+        ai_brain: { port: number };
+        bmo_api: { port: number };
+        dashboard: { port: number };
+        ai_voice: { enabled: boolean; port: number; audio_max_files: number };
+    };
     agent: { name: string; model: string; max_tool_iterations: number };
     tools: { enabled: boolean; log_all: boolean; show_in_chat: boolean };
     context: { max_tokens: number; pruning_threshold: number; compaction_enabled: boolean };
@@ -115,12 +121,50 @@ const NAV_ITEMS = [
 
 type ViewId = typeof NAV_ITEMS[number]["id"];
 
+// ── Credential Row ────────────────────────────────────────────────────────────
+
+function CredentialRow({ label, value, onChange, inputStyle }: {
+    label: string; value: string; onChange: (v: string) => void;
+    inputStyle: React.CSSProperties;
+}) {
+    const [show, setShow] = useState(false);
+    return (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: "10px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-muted)", flexShrink: 0, fontFamily: "JetBrains Mono, monospace" }}>{label}</span>
+            <div style={{ flex: 1, maxWidth: "260px", display: "flex", gap: "6px" }}>
+                <input
+                    type={show ? "text" : "password"}
+                    style={{ ...inputStyle }}
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                />
+                <button
+                    onClick={() => setShow(s => !s)}
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text-muted)", cursor: "pointer", padding: "4px 8px", fontSize: "11px", flexShrink: 0 }}
+                >
+                    {show ? "nascondi" : "mostra"}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ── Settings View ─────────────────────────────────────────────────────────────
 
 function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoConfig) => void }) {
     const [local, setLocal] = useState<BmoConfig>(JSON.parse(JSON.stringify(config)));
     const [saved, setSaved] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [envConfig, setEnvConfig] = useState<Record<string, string>>({});
+    const [envSaved, setEnvSaved] = useState(false);
+    const [envSaving, setEnvSaving] = useState(false);
+
+    useEffect(() => {
+        fetch(`${API_URL}/api/config/env`)
+            .then(r => r.json())
+            .then(setEnvConfig)
+            .catch(() => {});
+    }, []);
 
     function setAgent<K extends keyof BmoConfig["agent"]>(key: K, value: BmoConfig["agent"][K]) {
         setLocal(p => ({ ...p, agent: { ...p.agent, [key]: value } }));
@@ -130,6 +174,26 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
     }
     function setContext<K extends keyof BmoConfig["context"]>(key: K, value: BmoConfig["context"][K]) {
         setLocal(p => ({ ...p, context: { ...p.context, [key]: value } }));
+    }
+    function setAiVoice<K extends keyof BmoConfig["services"]["ai_voice"]>(key: K, value: BmoConfig["services"]["ai_voice"][K]) {
+        setLocal(p => ({ ...p, services: { ...p.services, ai_voice: { ...p.services.ai_voice, [key]: value } } }));
+    }
+
+    async function handleSaveEnv() {
+        setEnvSaving(true);
+        try {
+            const res = await fetch(`${API_URL}/api/config/env`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(envConfig),
+            });
+            if (res.ok) {
+                setEnvSaved(true);
+                setTimeout(() => setEnvSaved(false), 2500);
+            }
+        } finally {
+            setEnvSaving(false);
+        }
     }
 
     async function handleSave() {
@@ -228,6 +292,39 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
                     <Toggle value={local.context.compaction_enabled} onChange={v => setContext("compaction_enabled", v)}/>
                 </Row>
 
+                <Section title="Servizi (🔒 richiede restart)"/>
+                <Row label="workspace_path">
+                    <input style={{ ...inputStyle, opacity: 0.5, cursor: "not-allowed" }}
+                           value={local.workspace_path ?? ""} disabled readOnly/>
+                </Row>
+                <Row label="Porta AI Brain">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.ai_brain?.port ?? 8000} disabled readOnly/>
+                </Row>
+                <Row label="Porta Bmo API">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.bmo_api?.port ?? 5271} disabled readOnly/>
+                </Row>
+                <Row label="Porta Dashboard">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.dashboard?.port ?? 3000} disabled readOnly/>
+                </Row>
+                <Row label="Porta AI Voice">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.ai_voice?.port ?? 5050} disabled readOnly/>
+                </Row>
+
+                <Section title="AI Voice"/>
+                <Row label="Abilitato">
+                    <Toggle value={local.services?.ai_voice?.enabled ?? false}
+                            onChange={v => setAiVoice("enabled", v)}/>
+                </Row>
+                <Row label="Max file audio">
+                    <input style={{ ...inputStyle, width: "80px" }} type="number" min={1} max={50}
+                           value={local.services?.ai_voice?.audio_max_files ?? 10}
+                           onChange={e => setAiVoice("audio_max_files", parseInt(e.target.value) || 1)}/>
+                </Row>
+
                 {/* Save */}
                 <div style={{ marginTop: "28px", display: "flex", alignItems: "center", gap: "12px" }}>
                     <button onClick={handleSave} disabled={saving} style={{
@@ -243,6 +340,36 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
                     {saved && (
                         <span style={{ fontSize: "13px", color: "var(--online)" }}>✓ Salvato</span>
                     )}
+                </div>
+
+                {/* Credenziali */}
+                <Section title="🔑 Credenziali (.env)"/>
+                {Object.entries(envConfig).map(([key, value]) => (
+                    <CredentialRow
+                        key={key}
+                        label={key}
+                        value={value}
+                        onChange={v => setEnvConfig(p => ({ ...p, [key]: v }))}
+                        inputStyle={inputStyle}
+                    />
+                ))}
+                {Object.keys(envConfig).length === 0 && (
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
+                        File .env non trovato o vuoto.
+                    </div>
+                )}
+                <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button onClick={handleSaveEnv} disabled={envSaving} style={{
+                        padding: "9px 22px",
+                        background: "linear-gradient(135deg, #6b21a8 0%, #a78bfa 100%)",
+                        border: "none", borderRadius: "10px", color: "white",
+                        fontSize: "13px", fontWeight: 600, cursor: envSaving ? "not-allowed" : "pointer",
+                        opacity: envSaving ? 0.6 : 1,
+                        fontFamily: "'Outfit', system-ui, sans-serif",
+                    }}>
+                        {envSaving ? "Salvataggio..." : "Salva credenziali"}
+                    </button>
+                    {envSaved && <span style={{ fontSize: "13px", color: "var(--online)" }}>✓ Salvato</span>}
                 </div>
             </div>
         </div>
@@ -268,6 +395,23 @@ export default function Home() {
         fetch(`${API_URL}/api/config`)
             .then(r => r.json())
             .then(setConfig)
+            .catch(() => {});
+    }, []);
+
+    // Load conversation history on mount
+    useEffect(() => {
+        fetch(`${API_URL}/api/chat/history`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data?.messages?.length) return;
+                const loaded: Message[] = data.messages.map((m: {role: string; content: string; created_at: string}, i: number) => ({
+                    id: i + 1,
+                    role: m.role === "assistant" ? "ai" as const : "user" as const,
+                    text: m.content,
+                    time: new Date(m.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+                }));
+                setMessages(loaded);
+            })
             .catch(() => {});
     }, []);
 
