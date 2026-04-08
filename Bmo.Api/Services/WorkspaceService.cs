@@ -22,6 +22,41 @@ public class WorkspaceService
         InitializeDatabase();
     }
 
+    public string SkillsPath => Path.Combine(WorkspacePath, "skills");
+    public string SkillsJsonPath => Path.Combine(WorkspacePath, "skills.json");
+
+    public async Task<string> GetSkillsJsonAsync()
+    {
+        if (!File.Exists(SkillsJsonPath))
+            return """{"capabilities":[],"learned_behaviors":[]}""";
+        return await File.ReadAllTextAsync(SkillsJsonPath);
+    }
+
+    public async Task SaveSkillsJsonAsync(string json) =>
+        await File.WriteAllTextAsync(SkillsJsonPath, json);
+
+    public async Task<string> GetSkillContentAsync(string filename)
+    {
+        var safePath = SanitizeSkillPath(filename);
+        if (!File.Exists(safePath))
+            throw new FileNotFoundException($"Skill file not found: {filename}");
+        return await File.ReadAllTextAsync(safePath);
+    }
+
+    public async Task SaveSkillContentAsync(string filename, string content)
+    {
+        var safePath = SanitizeSkillPath(filename);
+        await File.WriteAllTextAsync(safePath, content);
+    }
+
+    private string SanitizeSkillPath(string filename)
+    {
+        var name = Path.GetFileName(filename);
+        if (!name.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Skill files must be .md files");
+        return Path.Combine(SkillsPath, name);
+    }
+
     public SqliteConnection OpenConnection() =>
         new($"Data Source={DbPath}");
 
