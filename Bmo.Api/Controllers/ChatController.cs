@@ -113,4 +113,13 @@ public class ChatController(
         await chatService.ResetAsync();
         return Ok(new { status = "ok" });
     }
+
+    // ── History retrieval ────────────────────────────────────────────────────
+
+    [HttpGet("history")]
+    public async Task<IActionResult> History()
+    {
+        var json = await chatService.GetHistoryAsync();
+        return Content(json, "application/json");
+    }
 }

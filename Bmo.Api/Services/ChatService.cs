@@ -13,4 +13,7 @@ public class ChatService(PythonClient pythonClient)
 
     public async Task ResetAsync() =>
         await pythonClient.ResetSessionAsync();
+
+    public async Task<string> GetHistoryAsync() =>
+        await pythonClient.GetHistoryAsync();
 }

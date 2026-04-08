@@ -19,10 +19,22 @@ type Message = {
     audioUrl?: string;
 };
 
+type Skill = {
+    name: string;
+    description: string;
+    file: string;
+};
+
 type BmoConfig = {
     version: string;
     workspace_path: string;
     dev_mode: boolean;
+    services: {
+        ai_brain: { port: number };
+        bmo_api: { port: number };
+        dashboard: { port: number };
+        ai_voice: { enabled: boolean; port: number; audio_max_files: number };
+    };
     agent: { name: string; model: string; max_tool_iterations: number };
     tools: { enabled: boolean; log_all: boolean; show_in_chat: boolean };
     context: { max_tokens: number; pruning_threshold: number; compaction_enabled: boolean };
@@ -59,6 +71,15 @@ function SettingsIcon({ size = 20, color = "currentColor" }: { size?: number; co
              strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+    );
+}
+
+function SkillsIcon({ size = 20, color = "currentColor" }: { size?: number; color?: string }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8"
+             strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
         </svg>
     );
 }
@@ -110,10 +131,39 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 const NAV_ITEMS = [
     { id: "chat",     label: "Chat B.M.O.",   icon: BmoIcon },
+    { id: "skills",   label: "Skills",        icon: SkillsIcon },
     { id: "settings", label: "Impostazioni",  icon: SettingsIcon },
 ] as const;
 
 type ViewId = typeof NAV_ITEMS[number]["id"];
+
+// ── Credential Row ────────────────────────────────────────────────────────────
+
+function CredentialRow({ label, value, onChange, inputStyle }: {
+    label: string; value: string; onChange: (v: string) => void;
+    inputStyle: React.CSSProperties;
+}) {
+    const [show, setShow] = useState(false);
+    return (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: "10px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-muted)", flexShrink: 0, fontFamily: "JetBrains Mono, monospace" }}>{label}</span>
+            <div style={{ flex: 1, maxWidth: "260px", display: "flex", gap: "6px" }}>
+                <input
+                    type={show ? "text" : "password"}
+                    style={{ ...inputStyle }}
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                />
+                <button
+                    onClick={() => setShow(s => !s)}
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text-muted)", cursor: "pointer", padding: "4px 8px", fontSize: "11px", flexShrink: 0 }}
+                >
+                    {show ? "nascondi" : "mostra"}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 // ── Settings View ─────────────────────────────────────────────────────────────
 
@@ -121,6 +171,16 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
     const [local, setLocal] = useState<BmoConfig>(JSON.parse(JSON.stringify(config)));
     const [saved, setSaved] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [envConfig, setEnvConfig] = useState<Record<string, string>>({});
+    const [envSaved, setEnvSaved] = useState(false);
+    const [envSaving, setEnvSaving] = useState(false);
+
+    useEffect(() => {
+        fetch(`${API_URL}/api/config/env`)
+            .then(r => r.json())
+            .then(setEnvConfig)
+            .catch(() => {});
+    }, []);
 
     function setAgent<K extends keyof BmoConfig["agent"]>(key: K, value: BmoConfig["agent"][K]) {
         setLocal(p => ({ ...p, agent: { ...p.agent, [key]: value } }));
@@ -130,6 +190,26 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
     }
     function setContext<K extends keyof BmoConfig["context"]>(key: K, value: BmoConfig["context"][K]) {
         setLocal(p => ({ ...p, context: { ...p.context, [key]: value } }));
+    }
+    function setAiVoice<K extends keyof BmoConfig["services"]["ai_voice"]>(key: K, value: BmoConfig["services"]["ai_voice"][K]) {
+        setLocal(p => ({ ...p, services: { ...p.services, ai_voice: { ...p.services.ai_voice, [key]: value } } }));
+    }
+
+    async function handleSaveEnv() {
+        setEnvSaving(true);
+        try {
+            const res = await fetch(`${API_URL}/api/config/env`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(envConfig),
+            });
+            if (res.ok) {
+                setEnvSaved(true);
+                setTimeout(() => setEnvSaved(false), 2500);
+            }
+        } finally {
+            setEnvSaving(false);
+        }
     }
 
     async function handleSave() {
@@ -228,6 +308,39 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
                     <Toggle value={local.context.compaction_enabled} onChange={v => setContext("compaction_enabled", v)}/>
                 </Row>
 
+                <Section title="Servizi (🔒 richiede restart)"/>
+                <Row label="workspace_path">
+                    <input style={{ ...inputStyle, opacity: 0.5, cursor: "not-allowed" }}
+                           value={local.workspace_path ?? ""} disabled readOnly/>
+                </Row>
+                <Row label="Porta AI Brain">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.ai_brain?.port ?? 8000} disabled readOnly/>
+                </Row>
+                <Row label="Porta Bmo API">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.bmo_api?.port ?? 5271} disabled readOnly/>
+                </Row>
+                <Row label="Porta Dashboard">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.dashboard?.port ?? 3000} disabled readOnly/>
+                </Row>
+                <Row label="Porta AI Voice">
+                    <input style={{ ...inputStyle, width: "80px", opacity: 0.5, cursor: "not-allowed" }}
+                           type="number" value={local.services?.ai_voice?.port ?? 5050} disabled readOnly/>
+                </Row>
+
+                <Section title="AI Voice"/>
+                <Row label="Abilitato">
+                    <Toggle value={local.services?.ai_voice?.enabled ?? false}
+                            onChange={v => setAiVoice("enabled", v)}/>
+                </Row>
+                <Row label="Max file audio">
+                    <input style={{ ...inputStyle, width: "80px" }} type="number" min={1} max={50}
+                           value={local.services?.ai_voice?.audio_max_files ?? 10}
+                           onChange={e => setAiVoice("audio_max_files", parseInt(e.target.value) || 1)}/>
+                </Row>
+
                 {/* Save */}
                 <div style={{ marginTop: "28px", display: "flex", alignItems: "center", gap: "12px" }}>
                     <button onClick={handleSave} disabled={saving} style={{
@@ -244,7 +357,288 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
                         <span style={{ fontSize: "13px", color: "var(--online)" }}>✓ Salvato</span>
                     )}
                 </div>
+
+                {/* Credenziali */}
+                <Section title="🔑 Credenziali (.env)"/>
+                {Object.entries(envConfig).map(([key, value]) => (
+                    <CredentialRow
+                        key={key}
+                        label={key}
+                        value={value}
+                        onChange={v => setEnvConfig(p => ({ ...p, [key]: v }))}
+                        inputStyle={inputStyle}
+                    />
+                ))}
+                {Object.keys(envConfig).length === 0 && (
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 0" }}>
+                        File .env non trovato o vuoto.
+                    </div>
+                )}
+                <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button onClick={handleSaveEnv} disabled={envSaving} style={{
+                        padding: "9px 22px",
+                        background: "linear-gradient(135deg, #6b21a8 0%, #a78bfa 100%)",
+                        border: "none", borderRadius: "10px", color: "white",
+                        fontSize: "13px", fontWeight: 600, cursor: envSaving ? "not-allowed" : "pointer",
+                        opacity: envSaving ? 0.6 : 1,
+                        fontFamily: "'Outfit', system-ui, sans-serif",
+                    }}>
+                        {envSaving ? "Salvataggio..." : "Salva credenziali"}
+                    </button>
+                    {envSaved && <span style={{ fontSize: "13px", color: "var(--online)" }}>✓ Salvato</span>}
+                </div>
             </div>
+        </div>
+    );
+}
+
+// ── Skills View ───────────────────────────────────────────────────────────────
+
+function SkillsView() {
+    const [skills, setSkills] = useState<Skill[]>([]);
+    const [selected, setSelected] = useState<Skill | null>(null);
+    const [content, setContent] = useState("");
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [showModal, setShowModal] = useState(false);
+    const [newName, setNewName] = useState("");
+    const [newDesc, setNewDesc] = useState("");
+    const [newFile, setNewFile] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [loadingContent, setLoadingContent] = useState(false);
+
+    // Dynamic import of Monaco to avoid SSR issues
+    const [Editor, setEditor] = useState<React.ComponentType<{
+        height: string; language: string; value: string;
+        onChange: (v: string | undefined) => void; theme: string;
+        options: object;
+    }> | null>(null);
+
+    useEffect(() => {
+        import("@monaco-editor/react").then(mod => {
+            setEditor(() => mod.default);
+        });
+    }, []);
+
+    useEffect(() => {
+        loadSkills();
+    }, []);
+
+    async function loadSkills() {
+        setLoading(true);
+        try {
+            const r = await fetch(`${API_URL}/api/skills`);
+            const data = await r.json();
+            const list: Skill[] = data.capabilities ?? [];
+            setSkills(list);
+            if (list.length > 0 && !selected) {
+                selectSkill(list[0]);
+            }
+        } catch {}
+        setLoading(false);
+    }
+
+    async function selectSkill(skill: Skill) {
+        setSelected(skill);
+        setLoadingContent(true);
+        try {
+            const filename = skill.file.split("/").pop() ?? skill.file;
+            const r = await fetch(`${API_URL}/api/skills/content?file=${encodeURIComponent(filename)}`);
+            const data = await r.json();
+            setContent(data.content ?? "");
+        } catch {
+            setContent("");
+        }
+        setLoadingContent(false);
+    }
+
+    async function handleSave() {
+        if (!selected) return;
+        setSaving(true);
+        try {
+            const filename = selected.file.split("/").pop() ?? selected.file;
+            const r = await fetch(`${API_URL}/api/skills/content?file=${encodeURIComponent(filename)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content }),
+            });
+            if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+        } finally { setSaving(false); }
+    }
+
+    async function handleCreate() {
+        if (!newName.trim() || !newFile.trim()) return;
+        const filename = newFile.trim().endsWith(".md") ? newFile.trim() : newFile.trim() + ".md";
+        try {
+            const r = await fetch(`${API_URL}/api/skills`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: newName, description: newDesc, filename }),
+            });
+            if (r.ok) {
+                setShowModal(false);
+                setNewName(""); setNewDesc(""); setNewFile("");
+                // Reload skills, then select the newly created one
+                const skillsRes = await fetch(`${API_URL}/api/skills`);
+                if (skillsRes.ok) {
+                    const data = await skillsRes.json();
+                    const list: Skill[] = data.capabilities ?? [];
+                    setSkills(list);
+                    const created = list.find(s => s.file === `skills/${filename}`);
+                    if (created) selectSkill(created);
+                }
+            }
+        } catch {}
+    }
+
+    const inputStyle: React.CSSProperties = {
+        background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px",
+        color: "var(--text)", fontSize: "13px", padding: "7px 10px",
+        fontFamily: "'Outfit', system-ui, sans-serif", outline: "none", width: "100%",
+    };
+
+    return (
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+            {/* Left panel: skill list */}
+            <div style={{
+                width: "240px", flexShrink: 0, borderRight: "1px solid var(--border)",
+                display: "flex", flexDirection: "column", background: "var(--sidebar-bg)",
+            }}>
+                <div style={{ padding: "20px 16px 12px", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text)", marginBottom: "10px" }}>Skills</div>
+                    <button onClick={() => setShowModal(true)} style={{
+                        width: "100%", padding: "8px 12px",
+                        background: "linear-gradient(135deg, #2270c9 0%, #3b8eea 100%)",
+                        border: "none", borderRadius: "8px", color: "white",
+                        fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                        fontFamily: "'Outfit', system-ui, sans-serif",
+                    }}>
+                        ＋ Nuova Skill
+                    </button>
+                </div>
+                <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+                    {loading ? (
+                        <div style={{ padding: "16px", fontSize: "12px", color: "var(--text-muted)" }}>Caricamento...</div>
+                    ) : skills.map(skill => (
+                        <div key={skill.file} onClick={() => selectSkill(skill)} style={{
+                            padding: "10px 16px", cursor: "pointer",
+                            background: selected?.file === skill.file ? "var(--surface-hover)" : "transparent",
+                            borderLeft: selected?.file === skill.file ? "2px solid var(--accent)" : "2px solid transparent",
+                            transition: "background 0.15s",
+                        }}>
+                            <div style={{ fontSize: "13px", fontWeight: 500, color: "var(--text)" }}>{skill.name}</div>
+                            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>{skill.description}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Right panel: Monaco editor */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                {selected ? (
+                    <>
+                        <div style={{
+                            padding: "10px 20px", background: "var(--sidebar-bg)",
+                            borderBottom: "1px solid var(--border)",
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                        }}>
+                            <div>
+                                <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>{selected.name}</span>
+                                <span style={{ marginLeft: "8px", fontSize: "11px", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{selected.file}</span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                {saved && <span style={{ fontSize: "12px", color: "var(--online)" }}>✓ Salvato</span>}
+                                <button onClick={handleSave} disabled={saving} style={{
+                                    padding: "7px 18px",
+                                    background: "linear-gradient(135deg, #2270c9 0%, #3b8eea 100%)",
+                                    border: "none", borderRadius: "8px", color: "white",
+                                    fontSize: "12px", fontWeight: 600, cursor: saving ? "not-allowed" : "pointer",
+                                    opacity: saving ? 0.6 : 1,
+                                    fontFamily: "'Outfit', system-ui, sans-serif",
+                                }}>
+                                    {saving ? "Salvataggio..." : "Salva"}
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, overflow: "hidden" }}>
+                            {loadingContent ? (
+                                <div style={{ padding: "20px", fontSize: "13px", color: "var(--text-muted)" }}>Caricamento...</div>
+                            ) : Editor ? (
+                                <Editor
+                                    height="100%"
+                                    language="markdown"
+                                    value={content}
+                                    onChange={v => setContent(v ?? "")}
+                                    theme="vs-dark"
+                                    options={{
+                                        minimap: { enabled: false },
+                                        fontSize: 14,
+                                        lineNumbers: "off",
+                                        wordWrap: "on",
+                                        scrollBeyondLastLine: false,
+                                        renderLineHighlight: "none",
+                                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                                    }}
+                                />
+                            ) : (
+                                <div style={{ padding: "20px", fontSize: "13px", color: "var(--text-muted)" }}>Caricamento editor...</div>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "13px" }}>
+                        Seleziona una skill
+                    </div>
+                )}
+            </div>
+
+            {/* Modal: nuova skill */}
+            {showModal && (
+                <div style={{
+                    position: "fixed", inset: 0,
+                    background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+                    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+                }}>
+                    <div style={{
+                        background: "var(--sidebar-bg)", border: "1px solid var(--border)",
+                        borderRadius: "16px", padding: "28px", width: "360px",
+                        boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+                    }}>
+                        <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--text)", marginBottom: "20px" }}>Nuova Skill</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div>
+                                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Nome *</div>
+                                <input style={inputStyle} value={newName} onChange={e => setNewName(e.target.value)} placeholder="es. Web Search"/>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Descrizione</div>
+                                <input style={inputStyle} value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Breve descrizione della skill"/>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Nome file (.md) *</div>
+                                <input style={inputStyle} value={newFile} onChange={e => setNewFile(e.target.value)} placeholder="es. web_search.md"/>
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "24px", justifyContent: "flex-end" }}>
+                            <button onClick={() => setShowModal(false)} style={{
+                                padding: "8px 18px", background: "var(--surface)",
+                                border: "1px solid var(--border)", borderRadius: "8px",
+                                color: "var(--text-muted)", fontSize: "13px", cursor: "pointer",
+                                fontFamily: "'Outfit', system-ui, sans-serif",
+                            }}>Annulla</button>
+                            <button onClick={handleCreate} disabled={!newName.trim() || !newFile.trim()} style={{
+                                padding: "8px 18px",
+                                background: "linear-gradient(135deg, #2270c9 0%, #3b8eea 100%)",
+                                border: "none", borderRadius: "8px", color: "white",
+                                fontSize: "13px", fontWeight: 600,
+                                cursor: (!newName.trim() || !newFile.trim()) ? "not-allowed" : "pointer",
+                                opacity: (!newName.trim() || !newFile.trim()) ? 0.5 : 1,
+                                fontFamily: "'Outfit', system-ui, sans-serif",
+                            }}>Crea</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -268,6 +662,23 @@ export default function Home() {
         fetch(`${API_URL}/api/config`)
             .then(r => r.json())
             .then(setConfig)
+            .catch(() => {});
+    }, []);
+
+    // Load conversation history on mount
+    useEffect(() => {
+        fetch(`${API_URL}/api/chat/history`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data?.messages?.length) return;
+                const loaded: Message[] = data.messages.map((m: {role: string; content: string; created_at: string}, i: number) => ({
+                    id: i + 1,
+                    role: m.role === "assistant" ? "ai" as const : "user" as const,
+                    text: m.content,
+                    time: new Date(m.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+                }));
+                setMessages(loaded);
+            })
             .catch(() => {});
     }, []);
 
@@ -515,6 +926,8 @@ export default function Home() {
                             Caricamento impostazioni...
                         </div>
                     )
+            ) : view === "skills" ? (
+                <SkillsView />
             ) : (
                 <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--chat-bg)" }}>
 

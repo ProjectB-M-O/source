@@ -756,6 +756,69 @@ def start_services(config: dict):
     print(f"\n  {CG}{CB}Tutti i servizi sono stati avviati.{CR}\n")
 
 
+# ─── CLI PATH registration ───────────────────────────────────────────────────
+def _bmo_in_path() -> bool:
+    """Check if 'bmo' command is accessible."""
+    import shutil as _shutil
+    return _shutil.which("bmo") is not None
+
+
+def register_cli_in_path():
+    """Add project root to user PATH so 'bmo' is accessible globally."""
+    project_root = str(ROOT)
+
+    if _bmo_in_path():
+        return  # Already registered
+
+    _step("Registrazione comando 'bmo' nel PATH utente...")
+
+    if SYSTEM == "Windows":
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, "Environment", 0,
+                winreg.KEY_READ | winreg.KEY_SET_VALUE
+            )
+            try:
+                current_path, _ = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current_path = ""
+
+            if project_root not in current_path:
+                new_path = f"{current_path};{project_root}" if current_path else project_root
+                winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, new_path)
+                # Broadcast WM_SETTINGCHANGE so open shells pick up the change
+                try:
+                    import ctypes
+                    ctypes.windll.user32.SendMessageTimeoutW(
+                        0xFFFF, 0x001A, 0, "Environment", 0x0002, 5000, None
+                    )
+                except Exception:
+                    pass
+            winreg.CloseKey(key)
+            _ok("Comando 'bmo' registrato. Riapri il terminale per usarlo globalmente.")
+        except Exception as e:
+            _warn(f"PATH registration fallita: {e}")
+            _warn(f"Aggiungi manualmente '{project_root}' al PATH.")
+
+    else:
+        # Linux / macOS: append to .bashrc and .zshrc
+        export_line = f'\nexport PATH="{project_root}:$PATH"  # B.M.O. CLI\n'
+        home = Path.home()
+        modified = []
+        for rc_file in [home / ".bashrc", home / ".zshrc", home / ".profile"]:
+            if rc_file.exists():
+                content = rc_file.read_text()
+                if project_root not in content:
+                    rc_file.write_text(content + export_line)
+                    modified.append(rc_file.name)
+        if modified:
+            _ok(f"Comando 'bmo' aggiunto a: {', '.join(modified)}")
+            _ok("Esegui 'source ~/.bashrc' (o riapri il terminale) per attivarlo.")
+        else:
+            _warn(f"Aggiungi manualmente a .bashrc: export PATH=\"{project_root}:$PATH\"")
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
     print_header()
@@ -779,6 +842,7 @@ def main():
         save_env(ENV_PATH, env)
         print(f"\n  {CG}Configurazione salvata con successo.{CR}")
         setup_voice_venv_if_enabled(config)
+        register_cli_in_path()
 
     else:
         model = config.get("agent", {}).get("model", "?")
@@ -797,6 +861,8 @@ def main():
             sync_dashboard_env(config)
             # Installa AI.Voice se abilitato e venv mancante
             setup_voice_venv_if_enabled(config)
+
+        register_cli_in_path()
 
     start_services(config)
 

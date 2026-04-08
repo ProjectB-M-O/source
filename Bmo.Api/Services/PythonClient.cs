@@ -64,6 +64,15 @@ public class PythonClient(HttpClient httpClient)
         resp.EnsureSuccessStatusCode();
     }
 
+    // ── History retrieval ────────────────────────────────────────────────────
+
+    public async Task<string> GetHistoryAsync()
+    {
+        var resp = await httpClient.GetAsync("chat/history");
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsStringAsync();
+    }
+
     // ── Private ──────────────────────────────────────────────────────────────
 
     private sealed class PythonChatResponse
