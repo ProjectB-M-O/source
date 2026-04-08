@@ -11,6 +11,10 @@
     },
     "dashboard": {
       "port": 3000
+    },
+    "ai_voice": {
+      "enabled": true,
+      "port": 5050
     }
   },
   "agent": {

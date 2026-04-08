@@ -22,7 +22,11 @@
       "Bash(venv/Scripts/python -c \"print\\('python ok'\\)\")",
       "Bash(start \"\" /B venv\\\\\\\\Scripts\\\\\\\\python.exe server.py)",
       "Bash(powershell -Command \"Start-Process -FilePath 'venv\\\\\\\\Scripts\\\\\\\\python.exe' -ArgumentList 'server.py' -WorkingDirectory \\(Get-Location\\) -RedirectStandardOutput 'server_stdout.txt' -RedirectStandardError 'server_stderr.txt' -NoNewWindow\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(grep -E \"\\\\.\\(bat|py|sh|txt|json|cfg|toml\\)$\")",
+      "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe list:*)",
+      "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe install:*)",
+      "Bash(/c/Users/matte/Desktop/Workspace/source/AI.Voice/venv/Scripts/pip.exe index:*)"
     ]
   }
 }

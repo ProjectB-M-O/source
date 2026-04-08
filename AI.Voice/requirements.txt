@@ -1,6 +1,6 @@
 # AI.Voice — dipendenze Python
-# Nota: torch e faiss-cpu vengono installati separatamente da start.py
-# per garantire le versioni corrette (CPU build e compatibilità numpy 2.x).
+# Nota: torch viene installato separatamente da start.py (CPU build da pytorch.org).
+# numpy NON è pinnato perché rvc-python 0.1.5 richiede numpy<=1.23.5 (pip risolve automaticamente).
 #
 # Installazione manuale:
 #   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -12,6 +12,6 @@
 
 flask>=3.0.0
 piper-tts>=1.2.0
-rvc-python>=0.1.7
+rvc-python>=0.1.5
 soundfile>=0.12.0
-numpy>=1.24.0
+numpy
