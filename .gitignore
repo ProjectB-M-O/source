@@ -56,6 +56,9 @@ AI.Voice/*.log
 AI.Voice/server_stdout.txt
 AI.Voice/server_stderr.txt
 
+# ── Git Worktrees ─────────────────────────────────────────────────────────────
+.worktrees/
+
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 *.iml
