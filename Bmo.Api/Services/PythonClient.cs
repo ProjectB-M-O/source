@@ -29,6 +29,33 @@ public class PythonClient(HttpClient httpClient)
         await outputStream.FlushAsync(ct);
     }
 
+    // ── Streaming line-by-line (per intercept TTS) ───────────────────────────
+
+    /// <summary>
+    /// Legge lo stream SSE da AI.Brain riga per riga.
+    /// Usato dal ChatController per intercettare l'evento done e iniettare l'audio.
+    /// </summary>
+    public async IAsyncEnumerable<string> ReadStreamLinesAsync(
+        string message,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, "chat/stream");
+        req.Content = JsonContent.Create(new { message });
+
+        using var resp = await httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new System.IO.StreamReader(stream);
+
+        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is not null)
+                yield return line;
+        }
+    }
+
     // ── Session reset ────────────────────────────────────────────────────────
 
     public async Task ResetSessionAsync()

@@ -8,6 +8,9 @@ public class ChatService(PythonClient pythonClient)
     public async Task StreamAsync(string message, Stream outputStream, CancellationToken ct) =>
         await pythonClient.StreamMessageAsync(message, outputStream, ct);
 
+    public IAsyncEnumerable<string> ReadStreamLinesAsync(string message, CancellationToken ct) =>
+        pythonClient.ReadStreamLinesAsync(message, ct);
+
     public async Task ResetAsync() =>
         await pythonClient.ResetSessionAsync();
 }
