@@ -478,10 +478,15 @@ function SkillsView() {
             if (r.ok) {
                 setShowModal(false);
                 setNewName(""); setNewDesc(""); setNewFile("");
-                await loadSkills();
-                // Select the newly created skill
-                const newSkill: Skill = { name: newName, description: newDesc, file: `skills/${filename}` };
-                selectSkill(newSkill);
+                // Reload skills, then select the newly created one
+                const skillsRes = await fetch(`${API_URL}/api/skills`);
+                if (skillsRes.ok) {
+                    const data = await skillsRes.json();
+                    const list: Skill[] = data.capabilities ?? [];
+                    setSkills(list);
+                    const created = list.find(s => s.file === `skills/${filename}`);
+                    if (created) selectSkill(created);
+                }
             }
         } catch {}
     }

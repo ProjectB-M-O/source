@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -127,19 +128,21 @@ async def chat_stream(request: ChatRequest):
     async def _streaming_wrapper():
         # Save user message before streaming starts so it's persisted even if the LLM call fails.
         _save_message(_session_id, "user", request.message)
-        # NOTE: _history is mutated in-place by run_streaming; saves happen post-mutation.
+        voice_text = ""
         async for chunk in run_streaming(request.message, _history):
+            # Capture voice_text from the done SSE event
+            if chunk.startswith("data: "):
+                try:
+                    event = json.loads(chunk[6:].strip())
+                    if event.get("type") == "done":
+                        voice_text = event.get("voice_text", "")
+                except Exception:
+                    pass
             yield chunk
-        # After generator exhausts, history has been mutated by run_streaming.
-        # Save the assistant reply.
-        # The last assistant entry is the final item with role=assistant in _history.
-        assistant_content = ""
-        for entry in reversed(_history):
-            if entry.get("role") == "assistant" and isinstance(entry.get("content"), str):
-                assistant_content = entry["content"]
-                break
-        if assistant_content:
-            _save_message(_session_id, "assistant", assistant_content)
+        # After generator exhausts, save assistant reply from done event.
+        # If voice_text is empty (tool-only completion), skip saving.
+        if voice_text:
+            _save_message(_session_id, "assistant", voice_text)
 
     return StreamingResponse(
         _streaming_wrapper(),
@@ -151,6 +154,8 @@ async def chat_stream(request: ChatRequest):
 @app.post("/chat/reset")
 async def chat_reset():
     global _history, _session_id
+    # NOTE: deactivate + create is not atomic. A crash between the two leaves no active session.
+    # This is safe: startup creates a new session if none is active.
     _deactivate_session(_session_id)
     _session_id = _create_session()
     _history = []

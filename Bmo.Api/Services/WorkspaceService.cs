@@ -52,9 +52,15 @@ public class WorkspaceService
     private string SanitizeSkillPath(string filename)
     {
         var name = Path.GetFileName(filename);
-        if (!name.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(name) || !name.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Skill files must be .md files");
-        return Path.Combine(SkillsPath, name);
+
+        var safe = Path.GetFullPath(Path.Combine(SkillsPath, name));
+        var boundary = Path.GetFullPath(SkillsPath) + Path.DirectorySeparatorChar;
+        if (!safe.StartsWith(boundary, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Invalid skill path");
+
+        return safe;
     }
 
     public SqliteConnection OpenConnection() =>

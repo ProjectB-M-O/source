@@ -44,6 +44,8 @@ def _is_secret_key(key_name: str) -> bool:
 
 def _display_value(key_name: str, value) -> str:
     """Format a value for menu display (mask secrets)."""
+    if value is None:
+        return "(non impostato)"
     if _is_secret_key(key_name) and isinstance(value, str):
         return _mask_secret(value)
     return repr(value) if isinstance(value, str) else str(value)
@@ -56,6 +58,9 @@ def _parse_bool(raw: str) -> bool:
 
 def _coerce_value(current, raw: str):
     """Coerce raw string to the same type as current value."""
+    if current is None:
+        # Type unknown; return as string
+        return raw
     if isinstance(current, bool):
         return _parse_bool(raw)
     if isinstance(current, int):
