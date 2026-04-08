@@ -1,24 +1,24 @@
-# Memoria Persistente
+# Persistent Memory
 
-Puoi salvare e recuperare informazioni tra sessioni diverse usando il database SQLite integrato.
+You can store and retrieve information across different sessions using the built-in SQLite database.
 
-## Tool disponibili
+## Available tools
 
-- `save_memory(key, value, category?)` — Salva o aggiorna una voce
-  - `category` consigliati: `user`, `task`, `note`, `context`, `preference`
-- `query_memory(query)` — Cerca per key, value o categoria (max 20 risultati)
+- `save_memory(key, value, category?)` — Saves or updates an entry
+  - recommended `category` values: `user`, `task`, `note`, `context`, `preference`
+- `query_memory(query)` — Searches by key, value, or category (max 20 results)
 
-## Quando usarla
+## When to use it
 
-- **Informazioni sull'utente**: nome, preferenze, abitudini, contesto professionale
-- **Task**: obiettivi in corso, cose da fare, progressi
-- **Note**: osservazioni importanti per conversazioni future
-- **Preferenze**: come l'utente vuole che tu risponda, stile di comunicazione
+- **User information**: name, preferences, habits, professional context
+- **Tasks**: current goals, todos, progress
+- **Notes**: important observations for future conversations
+- **Preferences**: how the user wants you to respond, communication style
 
-## Esempio
+## Example
 
 ```
 save_memory("user_name", "Matteo", "user")
 save_memory("user_prefers_italian", "true", "preference")
-query_memory("user")  → restituisce tutte le voci con 'user' in key/value/categoria
+query_memory("user")  → returns all entries with 'user' in key/value/category
 ```

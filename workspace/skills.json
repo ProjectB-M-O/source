@@ -1,18 +1,18 @@
 {
   "capabilities": [
     {
-      "name": "Gestione File",
-      "description": "Lettura e scrittura di file nella workspace tramite tool dedicati",
+      "name": "File Management",
+      "description": "Read and write files in the workspace via dedicated tools",
       "file": "skills/file_management.md"
     },
     {
-      "name": "Memoria Persistente",
-      "description": "Salvataggio e recupero di informazioni persistenti su SQLite",
+      "name": "Persistent Memory",
+      "description": "Store and retrieve persistent information in SQLite",
       "file": "skills/memory.md"
     },
     {
-      "name": "Auto-modifica",
-      "description": "Aggiornamento della propria identità e delle proprie skill",
+      "name": "Self-Modification",
+      "description": "Update its own identity and skills",
       "file": "skills/self_modification.md"
     }
   ],
