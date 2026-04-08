@@ -2,10 +2,9 @@ import logging
 import logging.handlers
 import os
 from flask import Flask, request, Response, jsonify
-from pipeline import BMOVoicePipeline
+from pipeline import PiperPipeline
 from config import HOST, PORT
 
-# Log sia su file che su console
 log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "server.log")
 logging.basicConfig(
     level=logging.INFO,
@@ -19,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-logger.info("Inizializzazione pipeline BMO Voice...")
-pipeline = BMOVoicePipeline()
+logger.info("Inizializzazione Piper TTS pipeline...")
+pipeline = PiperPipeline()
 logger.info("Pipeline pronta. Server in avvio...")
 
 

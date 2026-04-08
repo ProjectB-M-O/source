@@ -40,6 +40,13 @@ builder.Services.AddHttpClient<PythonClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 
+var voicePort = builder.Configuration["services:ai_voice:port"] ?? "5050";
+builder.Services.AddHttpClient<VoiceClient>(client =>
+{
+    client.BaseAddress = new Uri($"http://localhost:{voicePort}/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 // ── Pipeline ─────────────────────────────────────────────────────────────────
 
 var app = builder.Build();

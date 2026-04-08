@@ -345,7 +345,7 @@ async def run_streaming(message: str, history: list[dict]) -> AsyncGenerator[str
         if finish_reason == "stop" or not tool_calls_acc:
             history.append({"role": "assistant", "content": full_content})
             history[:] = _prune_history(history)
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'voice_text': full_content})}\n\n"
             return
 
         # Esegui tool calls e invia eventi
@@ -381,4 +381,4 @@ async def run_streaming(message: str, history: list[dict]) -> AsyncGenerator[str
         for tc_id, res in tool_results.items():
             history.append({"role": "tool", "tool_call_id": tc_id, "content": res})
 
-    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    yield f"data: {json.dumps({'type': 'done', 'voice_text': ''})}\n\n"

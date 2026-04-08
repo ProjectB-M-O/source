@@ -1,24 +1,27 @@
 import os
-import torch
+import json
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 
-# RVC model (già esportato)
-RVC_MODEL_PATH = os.path.join(BASE_DIR, "../export/bmo_rvc_model/bmo_infer.pth")
-RVC_INDEX_PATH = os.path.join(BASE_DIR, "../export/bmo_rvc_model/bmo.index")
+# Modello Piper custom (fornito dall'utente)
+PIPER_MODEL_DIR = BASE_DIR / "models" / "bmo"
 
-# Pitch shift: alza la voce (BMO ha una voce acuta). Prova valori 3–6.
-RVC_PITCH_SHIFT = 4
+# Cartella output audio (rolling cleanup)
+AUDIO_OUT_DIR = BASE_DIR / "audio_out"
+AUDIO_OUT_DIR.mkdir(exist_ok=True)
 
-# Metodo f0: "rmvpe" = più qualità, "pm" = più veloce
-RVC_F0_METHOD = "rmvpe"
 
-# Piper TTS
-PIPER_MODEL_DIR = os.path.join(BASE_DIR, "models", "piper")
-PIPER_VOICE = "en_US-lessac-medium"
+def _load_max_files() -> int:
+    cfg_path = BASE_DIR / ".." / "Bmo.Api" / "bmo_config.json"
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        return int(cfg.get("services", {}).get("ai_voice", {}).get("audio_max_files", 10))
+    except Exception:
+        return 10
 
-# Device: auto-detect CUDA, fallback CPU
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+AUDIO_MAX_FILES = _load_max_files()
 
 # Server
 HOST = "0.0.0.0"

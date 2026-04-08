@@ -46,21 +46,15 @@ AI.Voice/__pycache__/
 AI.Voice/**/__pycache__/
 AI.Voice/**/*.pyc
 AI.Voice/**/*.pyo
-# Modelli Piper TTS (scaricati da download_models.py — ~61MB)
-AI.Voice/models/
-# File di test e log temporanei
-AI.Voice/*.wav
+# Modello Piper custom (fornito dall'utente — troppo grande per git)
+AI.Voice/models/bmo/*.onnx
+AI.Voice/models/bmo/*.json
+# Audio generati a runtime (rolling cleanup automatico)
+AI.Voice/audio_out/*.wav
+# Log e file temporanei
 AI.Voice/*.log
 AI.Voice/server_stdout.txt
 AI.Voice/server_stderr.txt
-
-# ── Export / Modelli addestrati ───────────────────────────────────────────────
-# I modelli RVC sono troppo grandi per git (~60-200MB).
-# Salvali su Google Drive / HuggingFace e copialie manualmente in:
-#   export/bmo_rvc_model/bmo_infer.pth   ← modello inferenza
-#   export/bmo_rvc_model/bmo.index       ← indice FAISS
-export/bmo_rvc_model/*.pth
-export/bmo_rvc_model/*.index
 
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/

@@ -16,23 +16,24 @@ source/
 ├── AI.Brain/             # Backend Python FastAPI (porta 8000) — logica AI/LLM
 │   ├── .venv/            # Virtual environment Python
 │   └── requirements.txt  # fastapi, uvicorn, openai, httpx, pydantic, python-dotenv
-├── AI.Voice/             # Server TTS Flask (porta 5050) — Piper TTS + RVC voice
-│   ├── venv/             # Virtual environment Python (Python 3.11)
-│   ├── requirements.txt  # flask, piper-tts, rvc-python, soundfile, numpy
-│   ├── server.py         # Flask server
-│   ├── pipeline.py       # Pipeline TTS→RVC
-│   ├── patch_fairseq.py  # Patch Python 3.11+ compat per fairseq/hydra
-│   ├── download_models.py
-│   └── models/piper/     # Modelli Piper TTS (.onnx)
+├── AI.Voice/             # Server TTS Flask (porta 5050) — Piper TTS con modello custom
+│   ├── venv/             # Virtual environment Python
+│   ├── requirements.txt  # flask, piper-tts
+│   ├── server.py         # Flask server (/speak, /health)
+│   ├── pipeline.py       # Pipeline TTS pura (Piper)
+│   ├── config.py         # Config: percorsi modello, porta, max audio files
+│   ├── models/bmo/       # Modello Piper custom (.onnx + .onnx.json) — da fornire
+│   └── audio_out/        # File WAV generati (rolling cleanup, max configurabile)
 ├── dashboard-bmo/        # Frontend Next.js (porta 3000)
 │   └── package.json
-├── workspace/            # Dati runtime (identity, skills)
-└── export/bmo_rvc_model/ # Modello RVC BMO (bmo_infer.pth + bmo.index)
+└── workspace/            # Dati runtime (identity, skills)
 ```
 
 ## Config principale: `Bmo.Api/bmo_config.json`
 
 - `services.ai_voice.enabled` → abilita/disabilita l'intero setup AI.Voice
+- `services.ai_voice.audio_max_files` → numero massimo di WAV tenuti in `audio_out/` (default 10)
+- `dev_mode` → `true` = audio inviato al browser (player inline in chat); `false` = solo salvataggio su disco (produzione)
 - `agent.model` → modello LLM usato (es. `google/gemini-2.0-flash-001`)
 - Porte configurabili per ogni servizio
 
@@ -49,30 +50,39 @@ Il launcher fa tutto automaticamente in ordine:
 
 ### Setup AI.Voice (step 3 - solo se abilitato)
 
-Sequenza pip installazioni:
-1. `torch torchaudio --index-url https://download.pytorch.org/whl/cpu` (CPU build)
-2. `pip install -r requirements.txt` (flask, piper-tts, **rvc-python**, soundfile, numpy)
-3. `pip install faiss-cpu>=1.8.0`
-4. `pip install --force-reinstall onnxruntime`
-5. `python patch_fairseq.py` (patcha fairseq e hydra per Python 3.11+)
-6. `python download_models.py` (scarica modello Piper TTS ~61MB)
+Installazione semplificata (niente torch/RVC/fairseq):
+1. `pip install -r requirements.txt` (flask, piper-tts)
+2. Verifica presenza modello in `models/bmo/` → **attende prompt interattivo** se mancante
 
-## Dipendenze critiche e note
+## Dipendenze AI.Voice
 
-- **rvc-python**: max versione disponibile su PyPI è `0.1.5` — NON usare `>=0.1.7`. Richiede `numpy<=1.23.5`
-- **numpy**: NON pinnare a `>=1.24.0` — rvc-python forza `numpy<=1.23.5`, pip risolve automaticamente a 1.23.5
-- **fairseq**: libreria vecchia, non compatibile Python 3.11+ out-of-the-box → `patch_fairseq.py` la patcha
-- **piper-tts**: dipende da `piper-phonemize` (binari nativi) — wheel disponibile per Python 3.9+ abi3 su Windows x64
-- **onnxruntime**: deve essere reinstallato forzatamente per evitare conflitti con `onnxruntime-dml` che installa rvc-python
-- Il venv AI.Voice usa Python 3.11 (da `AI.Voice/venv/pyvenv.cfg`)
+- **piper-tts**: wrapper Python per inferenza ONNX — nessuna dipendenza da torch/CUDA
+- Nessuna dipendenza da rvc-python, fairseq, faiss, onnxruntime, soundfile
+- Il venv usa il Python di sistema (testato con 3.11)
 
-## Modelli RVC BMO (non inclusi nel repo)
+## Modello Piper custom (non incluso nel repo)
 
-Vanno copiati manualmente in `export/bmo_rvc_model/`:
-- `bmo_infer.pth` — modello inferenza
-- `bmo.index` — indice FAISS
+Va copiato manualmente in `AI.Voice/models/bmo/`:
+- `model.onnx`      — modello ONNX addestrato con Piper trainer
+- `model.onnx.json` — config Piper del modello (generata dal trainer)
 
-Senza questi file il server parte ma la voce RVC non funziona.
+Lo script di onboarding attende esplicitamente che questi file siano presenti prima di continuare.
+
+## Flusso audio TTS
+
+```
+Frontend (checkbox 🔊 attiva, solo se dev_mode=true)
+  → POST /api/chat/stream { message, tts: true }
+      → Bmo.Api intercetta stream SSE
+          → AI.Brain: delta events proxied in real-time
+          → done event con voice_text → Bmo.Api chiama AI.Voice /speak
+              → AI.Voice sintetizza → salva in audio_out/ → ritorna WAV
+          → se dev_mode: SSE event { type:"audio", data:"<base64>" }
+          → SSE event { type:"done" }
+  → Frontend: player <audio> inline nel bubble AI
+```
+
+In produzione (`dev_mode=false`): audio generato e salvato su disco, non inviato al browser.
 
 ## Ambiente di sviluppo
 

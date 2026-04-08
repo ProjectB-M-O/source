@@ -162,7 +162,7 @@ def _voice_py_exe() -> Path:
 
 
 def setup_voice_venv():
-    """Crea il venv per AI.Voice e installa tutte le dipendenze nella sequenza corretta."""
+    """Crea il venv per AI.Voice e installa le dipendenze (flask + piper-tts)."""
     venv_dir = VOICE_DIR / "venv"
     req_file = VOICE_DIR / "requirements.txt"
     py_exe   = _voice_py_exe()
@@ -178,70 +178,39 @@ def setup_voice_venv():
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
         _ok("Virtual environment AI.Voice creato")
 
-    # Controlla se Flask è già installato (marker rapido per "setup già fatto")
-    probe = subprocess.run([str(py_exe), "-c", "import flask, piper, rvc_python"],
-                           capture_output=True)
+    # Controlla se le dipendenze sono già installate
+    probe = subprocess.run(
+        [str(py_exe), "-c", "import flask; import piper"],
+        capture_output=True
+    )
     if probe.returncode == 0:
         _ok("Dipendenze AI.Voice già installate")
     else:
         _require_internet()
-
-        _step("Installazione PyTorch (CPU build) per AI.Voice...")
-        subprocess.run([
-            str(pip_exe), "install", "torch", "torchaudio",
-            "--index-url", "https://download.pytorch.org/whl/cpu",
-        ], check=True)
-
-        _step("Installazione dipendenze AI.Voice (requirements.txt)...")
+        _step("Installazione dipendenze AI.Voice (flask + piper-tts)...")
         subprocess.run([str(pip_exe), "install", "-r", str(req_file)], check=True)
-
-        _step("Installazione faiss-cpu ≥ 1.8.0 (compatibilità numpy 2.x)...")
-        subprocess.run([str(pip_exe), "install", "faiss-cpu>=1.8.0"], check=True)
-
-        _step("Reinstallazione onnxruntime (evita onnxruntime-dml)...")
-        subprocess.run([str(pip_exe), "install", "--force-reinstall", "onnxruntime"],
-                       check=True)
-
-        _step("Applicazione patch fairseq (Python 3.11+ compat)...")
-        result = subprocess.run([str(py_exe), str(VOICE_DIR / "patch_fairseq.py")])
-        if result.returncode == 0:
-            _ok("Patch fairseq applicata")
-        else:
-            _warn("Patch fairseq parzialmente fallita — potrebbe causare problemi")
-
         _ok("Dipendenze AI.Voice installate")
 
-    # Download modelli Piper TTS se non presenti
-    piper_model = VOICE_DIR / "models" / "piper" / "en_US-lessac-medium.onnx"
-    if not piper_model.exists():
-        _require_internet()
-        _step("Download modello Piper TTS (~61MB)...")
-        result = subprocess.run([str(py_exe), str(VOICE_DIR / "download_models.py")])
-        if result.returncode == 0:
-            _ok("Modello Piper TTS scaricato")
+    # Verifica modello Piper custom in models/bmo/
+    bmo_model_dir = VOICE_DIR / "models" / "bmo"
+    bmo_model_dir.mkdir(parents=True, exist_ok=True)
+    onnx_files = list(bmo_model_dir.glob("*.onnx"))
+
+    if not onnx_files:
+        print(f"\n  {CR2}Nessun modello Piper trovato in AI.Voice/models/bmo/{CR}")
+        print(f"  {CY}Copia i file del tuo modello addestrato:{CR}")
+        print(f"    {CYL}  model.onnx{CR}       — il modello ONNX")
+        print(f"    {CYL}  model.onnx.json{CR}  — la config Piper")
+        print(f"\n  Il server AI.Voice non partirà senza questi file.\n")
+        input(f"  {CG}Premi INVIO quando i file sono pronti...{CR} ")
+        # Verifica di nuovo dopo il prompt
+        onnx_files = list(bmo_model_dir.glob("*.onnx"))
+        if not onnx_files:
+            _warn("Modello ancora non trovato — il server TTS potrebbe non funzionare.")
         else:
-            _warn("Download modello Piper TTS fallito — scaricalo manualmente con:")
-            print(f"  {CYL}  cd AI.Voice && python download_models.py{CR}")
+            _ok(f"Modello Piper trovato: {onnx_files[0].name}")
     else:
-        _ok("Modello Piper TTS già presente")
-
-    # Crea la cartella export/bmo_rvc_model se non esiste
-    rvc_dir = ROOT / "export" / "bmo_rvc_model"
-    rvc_dir.mkdir(parents=True, exist_ok=True)
-
-    # Verifica modello RVC BMO
-    rvc_model = rvc_dir / "bmo_infer.pth"
-    rvc_index = rvc_dir / "bmo.index"
-    if rvc_model.exists() and rvc_index.exists():
-        _ok("Modello RVC BMO trovato")
-    else:
-        _warn("Modello RVC BMO non trovato!")
-        print(f"  {CR2}Copia manualmente i file nella cartella export/bmo_rvc_model/:{CR}")
-        if not rvc_model.exists():
-            print(f"    {CR2}✗ bmo_infer.pth  (modello inferenza){CR}")
-        if not rvc_index.exists():
-            print(f"    {CR2}✗ bmo.index      (indice FAISS){CR}")
-        print(f"  Il server AI.Voice partirà ma fallirà senza questi file.")
+        _ok(f"Modello Piper trovato: {onnx_files[0].name}")
 
 
 def setup_voice_venv_if_enabled(config: dict):
@@ -561,9 +530,9 @@ def onboard(config: dict, env: dict) -> tuple[dict, dict]:
         svc[key] = {"port": int(val)}
 
     # AI.Voice — server TTS opzionale
-    print(f"\n  {CY}AI.Voice — Server TTS (Piper + RVC voce BMO):{CR}")
-    print( "  Richiede PyTorch (~700MB download) e ~2GB RAM durante l'uso.")
-    print( "  Necessario solo se vuoi che BMO parli con la voce addestrata.")
+    print(f"\n  {CY}AI.Voice — Server TTS (Piper voce custom):{CR}")
+    print( "  Richiede un modello Piper ONNX addestrato (model.onnx + model.onnx.json).")
+    print( "  Necessario solo se vuoi che BMO risponda con la voce sintetizzata.")
     voice_yn = input(f"  {CYL}Installare il server TTS? [s/N]:{CR} ").strip().lower()
     voice_enabled = voice_yn in ("s", "si", "y", "yes")
     if voice_enabled:
