@@ -16,11 +16,13 @@ type Message = {
     toolName?: string;
     toolCallId?: string;
     toolResult?: string;
+    audioUrl?: string;
 };
 
 type BmoConfig = {
     version: string;
     workspace_path: string;
+    dev_mode: boolean;
     agent: { name: string; model: string; max_tool_iterations: number };
     tools: { enabled: boolean; log_all: boolean; show_in_chat: boolean };
     context: { max_tokens: number; pruning_threshold: number; compaction_enabled: boolean };
@@ -180,6 +182,11 @@ function SettingsView({ config, onSave }: { config: BmoConfig; onSave: (c: BmoCo
                     Modifica <code style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "11px", color: "var(--accent)" }}>bmo_config.json</code>
                 </div>
 
+                <Section title="Sistema"/>
+                <Row label="Dev mode (audio in chat)">
+                    <Toggle value={local.dev_mode ?? true} onChange={v => setLocal(p => ({ ...p, dev_mode: v }))}/>
+                </Row>
+
                 <Section title="Agente"/>
                 <Row label="Nome">
                     <input style={inputStyle} value={local.agent.name}
@@ -251,6 +258,8 @@ export default function Home() {
     const [loading, setLoading] = useState(false);
     const [isOnline, setIsOnline] = useState(false);
     const [config, setConfig] = useState<BmoConfig | null>(null);
+    const [ttsEnabled, setTtsEnabled] = useState(false);
+    const audioUrlsRef = useRef<string[]>([]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -281,6 +290,23 @@ export default function Home() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    // ── Audio helpers ────────────────────────────────────────────────────────
+
+    function b64ToUrl(b64: string): string {
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        // FIFO: max 10 blob URLs in memoria
+        audioUrlsRef.current.push(url);
+        if (audioUrlsRef.current.length > 10) {
+            const old = audioUrlsRef.current.shift()!;
+            URL.revokeObjectURL(old);
+        }
+        return url;
+    }
 
     // ── Send ────────────────────────────────────────────────────────────────
 
@@ -315,7 +341,7 @@ export default function Home() {
             const res = await fetch(`${API_URL}/api/chat/stream`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text }),
+                body: JSON.stringify({ message: text, tts: ttsEnabled && (config?.dev_mode ?? false) }),
                 cache: "no-store",
             });
 
@@ -380,6 +406,13 @@ export default function Home() {
                                 }
                                 return updated;
                             });
+                            break;
+                        }
+                        case "audio": {
+                            const url = b64ToUrl(event.data as string);
+                            setMessages(prev => prev.map(m =>
+                                m.id === aiMsgId ? { ...m, audioUrl: url } : m
+                            ));
                             break;
                         }
                         case "done":
@@ -621,6 +654,15 @@ export default function Home() {
                                         {loading && !isUser && i === messages.length - 1 && msg.text === "" && (
                                             <span style={{ color: "var(--text-muted)", animation: "pulse 1s infinite" }}>▌</span>
                                         )}
+                                        {!isUser && msg.audioUrl && (
+                                            <div style={{ marginTop: "6px" }}>
+                                                <audio
+                                                    controls
+                                                    src={msg.audioUrl}
+                                                    style={{ height: "32px", width: "100%", maxWidth: "260px", borderRadius: "16px" }}
+                                                />
+                                            </div>
+                                        )}
                                         <span style={{
                                             display: "inline-block", marginLeft: "8px",
                                             fontSize: "10.5px", fontFamily: "'JetBrains Mono', monospace",
@@ -662,6 +704,24 @@ export default function Home() {
                         borderTop: "1px solid var(--border)",
                         display: "flex", alignItems: "flex-end", gap: "10px",
                     }}>
+                        {/* TTS toggle — visibile solo in dev_mode */}
+                        {config?.dev_mode && (
+                            <div style={{
+                                display: "flex", alignItems: "center", gap: "6px",
+                                flexShrink: 0, paddingBottom: "10px",
+                            }}>
+                                <Toggle value={ttsEnabled} onChange={setTtsEnabled}/>
+                                <span style={{
+                                    fontSize: "14px",
+                                    color: ttsEnabled ? "var(--accent)" : "var(--text-muted)",
+                                    whiteSpace: "nowrap",
+                                    cursor: "pointer",
+                                }} title={ttsEnabled ? "Risposta vocale attiva" : "Risposta vocale disattiva"}
+                                onClick={() => setTtsEnabled(v => !v)}>
+                                    🔊
+                                </span>
+                            </div>
+                        )}
                         <div className="input-wrapper" style={{
                             flex: 1, background: "var(--surface)", borderRadius: "22px",
                             padding: "10px 16px", display: "flex", alignItems: "flex-end",
