@@ -48,11 +48,11 @@ public class PythonClient(HttpClient httpClient)
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
         using var reader = new System.IO.StreamReader(stream);
 
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(ct);
-            if (line is not null)
-                yield return line;
+            if (line is null) break;
+            yield return line;
         }
     }
 
