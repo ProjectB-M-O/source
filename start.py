@@ -126,6 +126,35 @@ def check_python_version():
     _ok(f"Python {major}.{minor}")
 
 
+# ─── pip bootstrap helper ────────────────────────────────────────────────────
+def _ensure_pip(py_exe: Path, pip_exe: Path):
+    """
+    Garantisce che pip sia disponibile nel venv indicato.
+    Strategia (Debian/Ubuntu non includono pip nei venv):
+      1. Se pip_exe esiste → ok.
+      2. Prova ensurepip (funziona se python3-venv completo).
+      3. Fallback: scarica get-pip.py da bootstrap.pypa.io.
+    """
+    if pip_exe.exists():
+        return
+    _step("pip non trovato nel venv — bootstrap pip...")
+    # Tenta ensurepip
+    r = subprocess.run([str(py_exe), "-m", "ensurepip", "--upgrade"], capture_output=True)
+    if r.returncode == 0 and pip_exe.exists():
+        _ok("pip installato via ensurepip")
+        return
+    # Fallback: get-pip.py
+    _require_internet()
+    get_pip = py_exe.parent.parent / "_get-pip.py"
+    try:
+        _step("Download get-pip.py...")
+        urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", str(get_pip))
+        subprocess.run([str(py_exe), str(get_pip)], check=True)
+        _ok("pip installato via get-pip.py")
+    finally:
+        get_pip.unlink(missing_ok=True)
+
+
 # ─── 2. Python venv + dipendenze ─────────────────────────────────────────────
 def setup_python_venv():
     venv_dir = ROOT / "AI.Brain" / ".venv"
@@ -144,6 +173,8 @@ def setup_python_venv():
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
         _ok("Virtual environment creato")
 
+    _ensure_pip(py_exe, pip_exe)
+
     # Verifica se le dipendenze sono già installate
     probe = subprocess.run(
         [str(py_exe), "-c", "import fastapi"],
@@ -153,7 +184,7 @@ def setup_python_venv():
         _require_internet()
         _step("Installazione dipendenze Python (requirements.txt)...")
         subprocess.run(
-            [str(pip_exe), "install", "-r", str(req_file)],
+            [str(py_exe), "-m", "pip", "install", "-r", str(req_file)],
             check=True
         )
         _ok("Dipendenze Python installate")
@@ -184,6 +215,8 @@ def setup_voice_venv():
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
         _ok("Virtual environment AI.Voice creato")
 
+    _ensure_pip(py_exe, pip_exe)
+
     # Controlla se le dipendenze sono già installate
     probe = subprocess.run(
         [str(py_exe), "-c", "import flask; import piper"],
@@ -194,7 +227,7 @@ def setup_voice_venv():
     else:
         _require_internet()
         _step("Installazione dipendenze AI.Voice (flask + piper-tts)...")
-        subprocess.run([str(pip_exe), "install", "-r", str(req_file)], check=True)
+        subprocess.run([str(py_exe), "-m", "pip", "install", "-r", str(req_file)], check=True)
         _ok("Dipendenze AI.Voice installate")
 
     # Verifica modello Piper custom in models/bmo/
