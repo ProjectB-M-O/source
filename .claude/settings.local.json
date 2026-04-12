@@ -40,7 +40,8 @@
       "Bash(chmod +x \"C:/Users/matte/Desktop/source/.worktrees/v0.4/bmo\")",
       "Bash(echo \"chmod done \\(exit $?\\)\")",
       "Bash(python bmo_cli.py --help)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(chmod +x:*)"
     ]
   }
 }

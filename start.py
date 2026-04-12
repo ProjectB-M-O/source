@@ -441,7 +441,11 @@ def setup_node_modules():
     npm = str(_npm_local_cmd()) if _npm_local_cmd().exists() else (
         "npm.cmd" if SYSTEM == "Windows" else "npm"
     )
-    result = subprocess.run([npm, "install"], cwd=str(ROOT / "dashboard-bmo"))
+    npm_env = os.environ.copy()
+    if _npm_local_cmd().exists():
+        node_bin = str(NODE_DIR) if SYSTEM == "Windows" else str(NODE_DIR / "bin")
+        npm_env["PATH"] = f"{node_bin}{os.pathsep}{npm_env.get('PATH', '')}"
+    result = subprocess.run([npm, "install"], cwd=str(ROOT / "dashboard-bmo"), env=npm_env)
     if result.returncode == 0:
         _ok("Dipendenze npm installate")
     else:
@@ -1107,6 +1111,13 @@ def register_cli_in_path():
             _warn(f"Aggiungi manualmente '{project_root}' al PATH.")
 
     else:
+        # Linux / macOS: ensure the bmo script is executable
+        bmo_script = ROOT / "bmo"
+        if bmo_script.exists():
+            current_mode = bmo_script.stat().st_mode
+            if not (current_mode & 0o111):
+                bmo_script.chmod(current_mode | 0o111)
+
         # Linux / macOS: append to .bashrc and .zshrc
         export_line = f'\nexport PATH="{project_root}:$PATH"  # B.M.O. CLI\n'
         home = Path.home()
@@ -1169,7 +1180,56 @@ def main():
 
         register_cli_in_path()
 
-    start_services(config)
+    _verify_and_stop(config)
+
+
+# ─── Verify-and-stop (used by start.py after setup) ──────────────────────────
+def _verify_and_stop(config: dict, wait_seconds: int = 6) -> None:
+    """
+    Avvia i servizi in modalità managed, aspetta qualche secondo per verificare
+    che partano correttamente, poi li ferma tutti.
+    L'utente dovrà usare `bmo start` per avviare BMO in modo permanente.
+    """
+    print(f"\n{CB}── Verifica avvio servizi ───────────────────────────────{CR}\n")
+    print(f"  {CY}Avvio temporaneo dei servizi per verifica...{CR}\n")
+
+    state = start_services_managed(config, open_browser=False)
+
+    # Aspetta che i processi si inizializzino
+    print(f"  {CY}Attendo {wait_seconds}s per la verifica...{CR}")
+    for _ in range(wait_seconds):
+        time.sleep(1)
+        print("  .", end="", flush=True)
+    print()
+
+    # Verifica che i processi siano ancora vivi
+    services = state.get("services", {})
+    all_ok = True
+    for name, meta in services.items():
+        pid = meta.get("pid", 0)
+        alive = False
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except Exception:
+            pass
+        if alive:
+            _ok(f"{name} avviato correttamente (pid {pid})")
+        else:
+            _warn(f"{name} non risulta attivo (pid {pid})")
+            all_ok = False
+
+    # Ferma tutto
+    print(f"\n  {CY}Arresto servizi di verifica...{CR}")
+    stop_services_managed()
+
+    print()
+    if all_ok:
+        print(f"  {CG}{CB}Setup completato con successo.{CR}")
+    else:
+        print(f"  {CYL}Setup completato con avvisi — controlla i log in workspace/logs/.{CR}")
+    print(f"\n  Usa {CG}{CB}bmo start{CR} per avviare B.M.O.")
+    print(f"  Usa {CG}bmo quit{CR}  per fermarlo.\n")
 
 
 if __name__ == "__main__":

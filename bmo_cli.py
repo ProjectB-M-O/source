@@ -229,10 +229,7 @@ def cmd_onboard():
 
     _s.check_dependencies()
     _s.setup_voice_venv_if_enabled(config)
-    _s.start_services(config)
-
-    print(f"\n  {CG}✓{CR} Riconfigurazione completata. "
-          f"Chiudi i vecchi terminali di servizio se ancora aperti.")
+    _s._verify_and_stop(config)
 
 
 # ─── -config ──────────────────────────────────────────────────────────────────
