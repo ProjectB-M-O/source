@@ -68,3 +68,11 @@ AI.Voice/server_stderr.txt
 .DS_Store
 Thumbs.db
 
+# ── AI tools ──────────────────────────────────────────────────────────────────
+.claude/
+.cursor/
+.copilot/
+.aider/
+.continue/
+.codeium/
+

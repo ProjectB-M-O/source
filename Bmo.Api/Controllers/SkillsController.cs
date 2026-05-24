@@ -72,10 +72,9 @@ public class SkillsController(WorkspaceService workspace) : ControllerBase
             var root = doc.RootElement;
 
             // Build updated capabilities array
-            var capabilities = root.GetProperty("capabilities")
-                .EnumerateArray()
-                .Select(e => e.GetRawText())
-                .ToList();
+            var capabilities = root.TryGetProperty("capabilities", out var capProp)
+                ? capProp.EnumerateArray().Select(e => e.GetRawText()).ToList()
+                : new List<string>();
 
             var newEntry = JsonSerializer.Serialize(new
             {

@@ -59,8 +59,16 @@ source/
 │   ├── requirements.txt
 │   ├── models/bmo/            # model.onnx + model.onnx.json (forniti a mano)
 │   └── audio_out/             # WAV generati (cleanup "rolling")
-└── dashboard-bmo/            # Next.js UI
-    └── package.json          # + @monaco-editor/react per la tab Skills
+├── dashboard-bmo/            # Next.js UI
+│   └── package.json          # + @monaco-editor/react per la tab Skills
+└── workspace/                # dati runtime (generati automaticamente)
+    ├── brain.db               # sessioni e storia chat (AI.Brain)
+    ├── bmo_agent.db           # log tool calls (Bmo.Api)
+    ├── identity.json          # identità dell'agente
+    ├── skills.json            # lista skill
+    ├── skills/                # file MD delle skill
+    ├── services_state.json    # PID dei servizi avviati con `bmo start`
+    └── logs/                  # log dei servizi (modalità managed)
 ```
 
 ---
@@ -134,7 +142,9 @@ La config principale è in `Bmo.Api/bmo_config.json`. Alcuni valori chiave:
 - `services.*.port` → porte dei servizi
 - `services.ai_voice.enabled` → abilita/disabilita il TTS
 - `services.ai_voice.audio_max_files` → quanti WAV mantenere in `AI.Voice/audio_out/`
-- `dev_mode` → se `true`, l'audio viene inviato al browser via SSE (evento `audio`)
+- `dev_mode` → se `true`, l'audio TTS viene inviato al browser via SSE (evento `audio`) e il toggle 🔊 appare nella chat
+- `tools.enabled` / `tools.show_in_chat` / `tools.log_all` → controllo delle chiamate tool dell'agente
+- `agent.name` → nome visualizzato dell'agente
 
 `start.py` sincronizza anche:
 - `AI.Brain/.env` (es. `OPENROUTER_API_KEY`, `DOTNET_API_URL`)
@@ -151,8 +161,14 @@ Esempio (ridotto):
     "ai_voice": { "enabled": false, "port": 5050, "audio_max_files": 10 }
   },
   "agent": {
+    "name": "B.M.O.",
     "model": "google/gemini-2.0-flash-001",
     "max_tool_iterations": 5
+  },
+  "tools": {
+    "enabled": true,
+    "log_all": true,
+    "show_in_chat": true
   },
   "context": {
     "max_tokens": 8000,
@@ -280,8 +296,9 @@ npm run dev -- --port 3000
 
 - `OPENROUTER_API_KEY non configurata` → usa `bmo -config` oppure aggiorna `AI.Brain/.env` direttamente.
 - Porta occupata → `bmo -config` → sezione ⚠ RICHIEDE RESTART → modifica la porta → restart automatico.
-- TTS non parte → verifica che `model.onnx` e `model.onnx.json` siano in `AI.Voice/models/bmo/`.
+- TTS non parte → verifica che `model.onnx` e `model.onnx.json` siano in `AI.Voice/models/bmo/` e che `services.ai_voice.enabled` sia `true` in config.
 - Sessione non persistita → verifica che `workspace/brain.db` esista e sia scrivibile.
+- Servizi non partono con `bmo start` → controlla i log in `workspace/logs/` (file `ai_brain.log`, `bmo_api.log`, `dashboard.log`).
 
 ---
 

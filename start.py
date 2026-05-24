@@ -74,7 +74,7 @@ def _err(msg: str):  print(f"  {CR2}✗{CR} {msg}")
 
 # ─── Internet check ──────────────────────────────────────────────────────────
 def _has_internet() -> bool:
-    """Prova una connessione TCP a Google DNS (8.8.8.8:53) — rapido e affidabile."""
+    """Prova una connessione TCP a Google DNS (8.8.8.8:53)"""
     try:
         socket.setdefaulttimeout(5)
         with socket.create_connection(("8.8.8.8", 53)):

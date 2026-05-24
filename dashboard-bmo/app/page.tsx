@@ -752,7 +752,7 @@ export default function Home() {
             const res = await fetch(`${API_URL}/api/chat/stream`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text, tts: ttsEnabled && (config?.dev_mode ?? false) }),
+                body: JSON.stringify({ message: text, tts: ttsEnabled && (config?.services?.ai_voice?.enabled ?? false) }),
                 cache: "no-store",
             });
 
@@ -1117,8 +1117,8 @@ export default function Home() {
                         borderTop: "1px solid var(--border)",
                         display: "flex", alignItems: "flex-end", gap: "10px",
                     }}>
-                        {/* TTS toggle — visibile solo in dev_mode */}
-                        {config?.dev_mode && (
+                        {/* TTS toggle — visibile quando AI.Voice è abilitato */}
+                        {config?.services?.ai_voice?.enabled && (
                             <div style={{
                                 display: "flex", alignItems: "center", gap: "6px",
                                 flexShrink: 0, paddingBottom: "10px",

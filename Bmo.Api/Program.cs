@@ -11,12 +11,14 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var dashPort = builder.Configuration["services:dashboard:port"] ?? "3000";
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
     {
         policy
             .WithOrigins(
+                $"http://localhost:{dashPort}",
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "http://localhost:8080"
@@ -33,7 +35,8 @@ builder.Services.AddSingleton<ToolService>();
 // Chat
 builder.Services.AddScoped<ChatService>();
 
-var pythonBaseUrl = builder.Configuration["PythonApi:BaseUrl"] ?? "http://localhost:8000/";
+var aiPort = builder.Configuration["services:ai_brain:port"] ?? "8000";
+var pythonBaseUrl = builder.Configuration["PythonApi:BaseUrl"] ?? $"http://localhost:{aiPort}/";
 builder.Services.AddHttpClient<PythonClient>(client =>
 {
     client.BaseAddress = new Uri(pythonBaseUrl);
