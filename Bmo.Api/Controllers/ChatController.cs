@@ -94,7 +94,7 @@ public class ChatController(
                 }
                 catch
                 {
-                    // JSON non parsabile: passa riga così com'è
+                    // JSON non parsabile
                 }
             }
 
